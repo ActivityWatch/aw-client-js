@@ -1,6 +1,7 @@
 let rp = require('request-promise');
 
-let baseaddr = "Undefined";
+let baseaddr = null;
+
 module.exports.init = init;
 function init(addr, port){
     baseaddr = 'http://'+addr+':'+port;
@@ -9,6 +10,10 @@ function init(addr, port){
 // Template API GET request promise
 module.exports.get = get;
 function get(api){
+    if (baseaddr == null){
+        throw new Error("aw-client has not been initialized!");
+    }
+    // HTTP request options
     let options = {
         method: 'GET',
         uri: baseaddr+api,
@@ -17,13 +22,17 @@ function get(api){
         },
         json: true // Automatically parses the JSON string in the response
     };
-
+    // Return promise
     return rp(options)
 }
 
 // Template API POST request promise
 module.exports.post = post;
 function post(api, payload){
+    if (baseaddr == null){
+        throw new Error("aw-client has not been initialized!");
+    }
+    // HTTP request options
     let options = {
         method: 'POST',
         uri: baseaddr+api,
@@ -33,6 +42,6 @@ function post(api, payload){
         },
         json: true // Automatically stringifies the body to JSON
     };
-
+    // Return promise
     return rp(options)
 }

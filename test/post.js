@@ -1,12 +1,15 @@
 var assert = require('assert');
 var aw_client = require('../aw-client');
+
 aw_client.init('127.0.0.1', '5666');
+
 
 describe('Get', function() {
     it('Get buckets', function() {
         return aw_client.get('/api/0/buckets')
     });
 });
+
 
 testevent = {
     'label': 'this is a test label',
