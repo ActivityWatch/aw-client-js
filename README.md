@@ -7,22 +7,22 @@ Client library for ActivityWatch in JavaScript.
 
 Install dependencies
 
-    npm install
-
+```sh
+npm install
+```
 
 ## Usage
 
 include as a library
 
-    var aw_client = require('aw-client')
-
+```javascript
+const aw_client = require('aw-client');
+```
 
 ## Test
 
 Run unit tests
 
-    npm run test
-
-or
-
-    ./test.sh
+```sh
+npm run test
+```
