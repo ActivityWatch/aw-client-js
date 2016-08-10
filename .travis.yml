@@ -1,0 +1,11 @@
+language: node_js
+node_js:
+ - "5"
+ - "6"
+ - "node"
+
+install:
+ - "npm install"
+
+script:
+ - "./test.sh"
