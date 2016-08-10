@@ -1,0 +1,29 @@
+{
+  "name": "aw-client-js",
+  "version": "0.1.0",
+  "description": "An ActivityWatch client library for JavaScript/NodeJS",
+  "main": "aw-client.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "request": "^2.74.0",
+    "request-promise": "^4.1.1"
+  },
+  "devDependencies": {
+    "mocha": "^3.0.2"
+  },
+  "scripts": {
+    "test": "./test.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ActivityWatch/aw-client-js.git"
+  },
+  "author": "Johan Bjäreholt <johan@bjareho.lt>",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/ActivityWatch/aw-client-js/issues"
+  },
+  "homepage": "http://activitywatch.github.io/"
+}
