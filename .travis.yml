@@ -5,6 +5,7 @@ node_js:
  - "node"
 
 install:
+ - "pip install git+https://github.com/ActivityWatch/aw-server.git"
  - "npm install"
 
 script:
