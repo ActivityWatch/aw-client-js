@@ -1,6 +1,6 @@
-let AWClient = require('./aw-client').AWClient;
+const AWClient = require('./aw-client').AWClient;
 
-let awc = new AWClient();
+var awc = new AWClient();
 awc.getBucketInfo("aw-watcher-web-test").then((resp) => {
     console.log(resp.data);
 })
