@@ -1,7 +1,4 @@
 let axios = require('axios');
-let rp = require('request-promise');
-
-let baseaddr = null;
 
 
 class AWClient {
