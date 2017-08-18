@@ -1,3 +1,5 @@
+'use strict';
+
 const AWClient = require('./aw-client').AWClient;
 
 var awc = new AWClient();
