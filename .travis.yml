@@ -6,8 +6,9 @@ node_js:
  - "node"
 
 install:
- - "pip install git+https://github.com/ActivityWatch/aw-core.git"
- - "pip install git+https://github.com/ActivityWatch/aw-server.git"
+ - "python3 -V"
+ - "pip3 install git+https://github.com/ActivityWatch/aw-core.git"
+ - "pip3 install git+https://github.com/ActivityWatch/aw-server.git"
  - "npm install"
 
 script:
