@@ -7,8 +7,7 @@
     "test": "test"
   },
   "dependencies": {
-    "request": "^2.74.0",
-    "request-promise": "^4.1.1"
+    "axios": "^0.16.2",
   },
   "devDependencies": {
     "mocha": "^3.0.2"
