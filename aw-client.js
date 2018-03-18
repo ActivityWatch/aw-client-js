@@ -30,6 +30,10 @@ class AWClient {
     getEvents(bucket_id, params) {
         return this.req.get("/0/buckets/" + bucket_id + "/events", {params: params});
     }
+
+    heartbeat(bucket_id, pulsetime, data) {
+        return this.req.post('/0/buckets/'+bucket_id+"/heartbeat?pulsetime="+pulsetime, data);
+    }
 }
 
 module.exports.AWClient = AWClient;
