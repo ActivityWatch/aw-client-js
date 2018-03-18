@@ -4,16 +4,17 @@ const axios = require('axios');
 
 
 class AWClient {
-    constructor(options) {
-        if(options !== undefined) {
-            console.error("AWClient options currently not implemented")
-        }
+    constructor(clientname, testing) {
+        let port = !testing ? 5600 : 5666;
+        this.clientname = clientname;
+
         this.req = axios.create({
-          baseURL: 'http://127.0.0.1:5666/api',
+          baseURL: 'http://127.0.0.1:'+port+'/api',
           timeout: 1000,
-          headers: {'X-Custom-Header': 'foobar'}
+          headers: {'User-Agent': 'aw-client-js/0.1'}
         });
-		// Make 304 not an error (necessary for create bucket requests)
+
+        // Make 304 not an error (necessary for create bucket requests)
         this.req.interceptors.response.use(
             response => {
                 return response;
@@ -27,9 +28,9 @@ class AWClient {
         );
     }
 
-    createBucket(bucket_id, client, type, hostname) {
+    createBucket(bucket_id, type, hostname) {
         return this.req.post('/0/buckets/'+bucket_id, {
-            client: client,
+            client: this.clientname,
             type: type,
             hostname: hostname,
         });
