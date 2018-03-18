@@ -27,11 +27,16 @@ describe('Buckets', function() {
     });
 
     it('Create, delete and get buckets', (done) => {
+        /* Create -> getBucketInfo and verify -> delete -> getBuckets and verify */
         awc.createBucket("aw-client-js-test", "test", "unknown").then((resp) => {
-            awc.getBuckets().then((resp) => {
-                console.log(resp.data);
-                assert.equal('aw-client-js-unittest', resp.data['aw-client-js-test']['client']);
-                done();
+            awc.getBucketInfo("aw-client-js-test").then((resp) => {
+                assert.equal('aw-client-js-unittest', resp.data['client']);
+                awc.deleteBucket("aw-client-js-test").then((resp) => {
+                    awc.getBuckets().then((resp) => {
+                        assert.equal(false, "aw-client-js-test" in resp.data)
+                        done();
+                    })
+                })
             })
         })
     });
