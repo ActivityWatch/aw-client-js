@@ -1,14 +1,16 @@
 #!/bin/bash
+
+# Aborts script if any process returns non-zero exitcode
+set -e
+
 aw-server --testing --storage=memory &> /dev/null &
 AWPID=$!
 
-sleep 5  # Give some time to start
+# Give aw-server some time to start
+sleep 5
 
-node test.js
-EXITCODE=$?
-# TODO Switch back to using mocha
-# mocha
+# Run tests
+mocha
 
+# Shutdown AW
 kill $AWPID
-
-exit $EXITCODE

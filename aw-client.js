@@ -15,6 +15,14 @@ class AWClient {
         });
     }
 
+    createBucket(bucket_id, client, type, hostname) {
+        return this.req.post('/0/buckets/'+bucket_id, {
+            client: client,
+            type: type,
+            hostname: hostname,
+        });
+    }
+
     getBucketInfo(bucket_id) {
         return this.req.get("/0/buckets/" + bucket_id);
     }
