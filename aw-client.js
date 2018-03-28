@@ -4,13 +4,17 @@ const axios = require('axios');
 
 
 class AWClient {
-    constructor(clientname, testing) {
-        let port = !testing ? 5600 : 5666;
+    constructor(clientname, testing, baseurl) {
         this.clientname = clientname;
+        this.testing = testing;
+        if (baseurl == undefined){
+            let port = !testing ? 5600 : 5666;
+            baseurl = 'http://127.0.0.1:'+port;
+        }
 
         this.req = axios.create({
-          baseURL: 'http://127.0.0.1:'+port+'/api',
-          timeout: 1000,
+          baseURL: baseurl+'/api',
+          timeout: 5000,
           headers: {'User-Agent': 'aw-client-js/0.1'}
         });
 
@@ -19,8 +23,8 @@ class AWClient {
             response => {
                 return response;
             }, err => {
-                if (err.response.status == 304) {
-                    return err.response;
+                if (err && err.response && err.response.status == 304) {
+                    return err.data;
                 } else {
                     return Promise.reject(err);
                 }
@@ -41,7 +45,7 @@ class AWClient {
     }
 
     deleteBucket(bucket_id) {
-        return this.req.delete('/0/buckets/'+bucket_id)
+        return this.req.delete('/0/buckets/'+bucket_id+"?force=1");
     }
 
     getBuckets() {
@@ -54,6 +58,14 @@ class AWClient {
 
     getEvents(bucket_id, params) {
         return this.req.get("/0/buckets/" + bucket_id + "/events", {params: params});
+    }
+
+    getEventCount(bucket_id, starttime, endtime) {
+        let params = {
+            starttime: starttime,
+            endtime: endtime,
+        }
+        return this.req.get("/0/buckets/" + bucket_id + "/events/count", {params: params});
     }
 
     insertEvent(bucket_id, event) {
