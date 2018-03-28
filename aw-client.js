@@ -28,6 +28,10 @@ class AWClient {
         );
     }
 
+    info() {
+        return this.req.get('/0/info');
+    }
+
     createBucket(bucket_id, type, hostname) {
         return this.req.post('/0/buckets/'+bucket_id, {
             client: this.clientname,
@@ -65,7 +69,7 @@ class AWClient {
     }
 
     query(timeperiods, query) {
-        var data = {timeperiods: timeperiods, query: query}
+        let data = {timeperiods: timeperiods, query: query}
         return this.req.post('/0/query/', data);
     }
 }

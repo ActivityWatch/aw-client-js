@@ -12,6 +12,13 @@ testevent = {
 };
 
 describe('Buckets', function() {
+    it('info', (done) => {
+        awc.info().then((resp) => {
+            console.log(resp.data);
+            assert.equal(resp.data.testing, true);
+            done();
+        });
+    });
 
     it('Post event, get event and assert', (done) => {
         awc.createBucket("aw-client-js-test", "test", "unknown").then((resp) => {
