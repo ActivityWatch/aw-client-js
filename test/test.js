@@ -11,7 +11,7 @@ testevent = {
     }
 };
 
-describe('Buckets', function() {
+describe('All', function() {
     it('info', (done) => {
         awc.info().then((resp) => {
             console.log(resp.data);
