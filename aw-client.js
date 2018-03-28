@@ -63,6 +63,11 @@ class AWClient {
     heartbeat(bucket_id, pulsetime, data) {
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
     }
+
+    query(timeperiods, query) {
+        var data = {timeperiods: timeperiods, query: query}
+        return this.req.post('/0/query/', data);
+    }
 }
 
 module.exports.AWClient = AWClient;

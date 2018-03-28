@@ -51,4 +51,22 @@ describe('Buckets', function() {
             })
         })
     });
+
+    it('Query', (done) => {
+        awc.createBucket("aw-client-js-test", "test", "unknown").then((resp) => {
+            awc.heartbeat("aw-client-js-test", 5, testevent).then((resp) => {
+                let timeperiods = [testevent.timestamp+"/"+testevent.timestamp];
+                let query = [
+                    "bucket='aw-client-js-test';",
+                    "RETURN=query_bucket(bucket);"
+                ];
+                awc.query(timeperiods, query).then((resp) => {
+                    console.log(resp.data);
+                    assert.equal(testevent['timestamp'], resp.data[0][0]['timestamp']);
+                    assert.equal(testevent['data']['label'], resp.data[0][0]['data']['label']);
+                    done();
+                })
+            })
+        })
+    });
 });
