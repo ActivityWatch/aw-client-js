@@ -1,47 +1,89 @@
-let rp = require('request-promise');
+'use strict';
 
-let baseaddr = null;
+const axios = require('axios');
 
-module.exports.init = init;
-function init(addr, port){
-    baseaddr = 'http://'+addr+':'+port;
-}
 
-// Template API GET request promise
-module.exports.get = get;
-function get(api){
-    if (baseaddr == null){
-        throw new Error("aw-client has not been initialized!");
+class AWClient {
+    constructor(clientname, testing, baseurl) {
+        this.clientname = clientname;
+        this.testing = testing;
+        if (baseurl == undefined){
+            let port = !testing ? 5600 : 5666;
+            baseurl = 'http://127.0.0.1:'+port;
+        }
+
+        this.req = axios.create({
+          baseURL: baseurl+'/api',
+          timeout: 5000,
+          headers: {'User-Agent': 'aw-client-js/0.1'}
+        });
+
+        // Make 304 not an error (necessary for create bucket requests)
+        this.req.interceptors.response.use(
+            response => {
+                return response;
+            }, err => {
+                if (err && err.response && err.response.status == 304) {
+                    return err.data;
+                } else {
+                    return Promise.reject(err);
+                }
+            }
+        );
     }
-    // HTTP request options
-    let options = {
-        method: 'GET',
-        uri: baseaddr+api,
-        headers: {
-            'User-Agent': 'Request-Promise'
-        },
-        json: true // Automatically parses the JSON string in the response
-    };
-    // Return promise
-    return rp(options)
+
+    info() {
+        return this.req.get('/0/info');
+    }
+
+    createBucket(bucket_id, type, hostname) {
+        return this.req.post('/0/buckets/'+bucket_id, {
+            client: this.clientname,
+            type: type,
+            hostname: hostname,
+        });
+    }
+
+    deleteBucket(bucket_id) {
+        return this.req.delete('/0/buckets/'+bucket_id+"?force=1");
+    }
+
+    getBuckets() {
+        return this.req.get("/0/buckets/");
+    }
+
+    getBucketInfo(bucket_id) {
+        return this.req.get("/0/buckets/" + bucket_id);
+    }
+
+    getEvents(bucket_id, params) {
+        return this.req.get("/0/buckets/" + bucket_id + "/events", {params: params});
+    }
+
+    getEventCount(bucket_id, starttime, endtime) {
+        let params = {
+            starttime: starttime,
+            endtime: endtime,
+        }
+        return this.req.get("/0/buckets/" + bucket_id + "/events/count", {params: params});
+    }
+
+    insertEvent(bucket_id, event) {
+        return this.insertEvents(bucket_id, [event]);
+    }
+
+    insertEvents(bucket_id, events) {
+        return this.req.post('/0/buckets/' + bucket_id + "/events", events);
+    }
+
+    heartbeat(bucket_id, pulsetime, data) {
+        return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
+    }
+
+    query(timeperiods, query) {
+        let data = {timeperiods: timeperiods, query: query}
+        return this.req.post('/0/query/', data);
+    }
 }
 
-// Template API POST request promise
-module.exports.post = post;
-function post(api, payload){
-    if (baseaddr == null){
-        throw new Error("aw-client has not been initialized!");
-    }
-    // HTTP request options
-    let options = {
-        method: 'POST',
-        uri: baseaddr+api,
-        body: payload,
-        headers: {
-            'User-Agent': 'Request-Promise'
-        },
-        json: true // Automatically stringifies the body to JSON
-    };
-    // Return promise
-    return rp(options)
-}
+module.exports.AWClient = AWClient;

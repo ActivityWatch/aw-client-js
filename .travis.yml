@@ -2,10 +2,14 @@ language: node_js
 node_js:
  - "5"
  - "6"
+ - "7"
  - "node"
 
 install:
- - "pip install git+https://github.com/ActivityWatch/aw-server.git"
+ - "python3 -V"
+ - "python3 -m ensurepip"
+ - "pip3 install git+https://github.com/ActivityWatch/aw-core.git"
+ - "pip3 install git+https://github.com/ActivityWatch/aw-server.git"
  - "npm install"
 
 script:

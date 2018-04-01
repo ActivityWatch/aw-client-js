@@ -3,6 +3,8 @@ aw-client-js
 
 Client library for ActivityWatch in JavaScript.
 
+[![Build Status](https://travis-ci.org/ActivityWatch/aw-client-js.svg?branch=master)](https://travis-ci.org/ActivityWatch/aw-client-js)
+
 ## Install
 
 Install dependencies
