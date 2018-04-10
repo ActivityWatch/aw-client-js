@@ -2,6 +2,8 @@
 
 const axios = require('axios');
 
+let isBrowser = (window !== undefined);
+
 
 class AWClient {
     constructor(clientname, testing, baseurl) {
@@ -15,7 +17,7 @@ class AWClient {
         this.req = axios.create({
           baseURL: baseurl+'/api',
           timeout: 5000,
-          headers: {'User-Agent': 'aw-client-js/0.1'}
+          headers: isBrowser ? {} : {'User-Agent': 'aw-client-js/0.1'}
         });
 
         // Make 304 not an error (necessary for create bucket requests)
