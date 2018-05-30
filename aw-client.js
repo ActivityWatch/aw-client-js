@@ -16,7 +16,7 @@ class AWClient {
 
         this.req = axios.create({
           baseURL: baseurl+'/api',
-          timeout: 5000,
+          timeout: 10000,
           headers: isBrowser ? {} : {'User-Agent': 'aw-client-js/0.1'}
         });
 
