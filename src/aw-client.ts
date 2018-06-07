@@ -1,18 +1,21 @@
 import axios, { AxiosInstance } from 'axios';
 
-// declare var window: any;
 declare var module: any;
-
-// let isBrowser: boolean = (window !== undefined);
 const isNode = (typeof module !== 'undefined' && module.exports);
-     
+
+export interface Event {
+    id?: number;
+    timestamp: string;    // timestamp as iso8061 string
+    duration?: number;    // duration in seconds
+    data: { [k: string]: any };
+}
 
 class AWClient {
     public clientname: string;
     public testing: boolean;
     public req: AxiosInstance;
 
-    constructor(clientname: string, testing: boolean, baseurl: string) {
+    constructor(clientname: string, testing: boolean, baseurl: string | undefined = undefined) {
         this.clientname = clientname;
         this.testing = testing;
         if (baseurl == undefined){
@@ -64,13 +67,11 @@ class AWClient {
         return this.req.get("/0/buckets/" + bucket_id);
     }
 
-    // TODO: check what type params should be
-    getEvents(bucket_id: string, params: any) {
+    getEvents(bucket_id: string, params: { [k: string]: any }) {
         return this.req.get("/0/buckets/" + bucket_id + "/events", {params: params});
     }
 
-    // TODO: check what types starttime and endtime are
-    getEventCount(bucket_id: string, starttime: any, endtime: any) {
+    getEventCount(bucket_id: string, starttime: string, endtime: string) {
         let params = {
             starttime: starttime,
             endtime: endtime,
@@ -78,23 +79,19 @@ class AWClient {
         return this.req.get("/0/buckets/" + bucket_id + "/events/count", {params: params});
     }
 
-    // TODO: Check what type event is
-    insertEvent(bucket_id: string, event: any) {
+    insertEvent(bucket_id: string, event: Event) {
         return this.insertEvents(bucket_id, [event]);
     }
 
-    // TODO: Check what type events is
-    insertEvents(bucket_id: string, events: Array<any>) {
+    insertEvents(bucket_id: string, events: Array<Event>) {
         return this.req.post('/0/buckets/' + bucket_id + "/events", events);
     }
 
-    // TODO: Check what types pulsetime and data are
-    heartbeat(bucket_id: string, pulsetime: any, data: any) {
+    heartbeat(bucket_id: string, pulsetime: number, data: Event) {
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
     }
 
-    // TODO: Check what type timeperiods and query are
-    query(timeperiods: any, query: any) {
+    query(timeperiods: Array<string>, query: Array<string>) {
         let data = {timeperiods: timeperiods, query: query}
         return this.req.post('/0/query/', data);
     }
