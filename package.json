@@ -10,7 +10,10 @@
     "axios": "^0.16.2"
   },
   "devDependencies": {
-    "mocha": "^3.0.2"
+    "mocha": "^3.0.2",
+    "tslint": "^5.8.0",
+    "@types/node": "^7.0.43",
+    "@types/mocha": "^2.2.42"
   },
   "scripts": {
     "compile": "tsc",

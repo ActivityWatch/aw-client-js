@@ -6,7 +6,7 @@ AWPID=$!
 sleep 5
 
 # Run tests
-mocha
+mocha ./out/test/*.js
 EXITCODE=$?
 
 # Shutdown AW
