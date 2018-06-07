@@ -1,5 +1,5 @@
 var assert = require('assert');
-const AWClient = require('../aw-client').AWClient;
+const AWClient = require('../out/aw-client').AWClient;
 
 var awc = new AWClient("aw-client-js-unittest", true);
 
