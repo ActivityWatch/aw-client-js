@@ -3,11 +3,15 @@ import axios, { AxiosInstance } from 'axios';
 declare var module: any;
 const isNode = (typeof module !== 'undefined' && module.exports);
 
-export interface Event {
+export interface Heartbeat {
     id?: number;
     timestamp: string;    // timestamp as iso8601 string
     duration?: number;    // duration in seconds
     data: { [k: string]: any };
+}
+
+export interface Event extends Heartbeat {
+    duration: number;
 }
 
 class AWClient {
@@ -87,7 +91,7 @@ class AWClient {
         return this.req.post('/0/buckets/' + bucket_id + "/events", events);
     }
 
-    heartbeat(bucket_id: string, pulsetime: number, data: Event) {
+    heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
     }
 

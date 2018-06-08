@@ -6,6 +6,7 @@ const awc = new AWClient("aw-client-js-unittest", true);
 
 const testevent: Event = {
     timestamp: '2016-08-09T14:35:10.363000+00:00',
+    duration: 0,
     data: {
         'label': 'this is a test label'
     }
