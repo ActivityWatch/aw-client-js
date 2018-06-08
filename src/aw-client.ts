@@ -5,7 +5,7 @@ const isNode = (typeof module !== 'undefined' && module.exports);
 
 export interface Event {
     id?: number;
-    timestamp: string;    // timestamp as iso8061 string
+    timestamp: string;    // timestamp as iso8601 string
     duration?: number;    // duration in seconds
     data: { [k: string]: any };
 }
