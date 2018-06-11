@@ -1,6 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
 
-declare var module: any;
 const isNode = (typeof module !== 'undefined' && module.exports);
 
 export interface Heartbeat {
@@ -22,15 +21,15 @@ class AWClient {
     constructor(clientname: string, testing: boolean, baseurl: string | undefined = undefined) {
         this.clientname = clientname;
         this.testing = testing;
-        if (baseurl == undefined){
-            let port = !testing ? 5600 : 5666;
-            baseurl = 'http://127.0.0.1:'+port;
+        if (baseurl == undefined) {
+            const port = !testing ? 5600 : 5666;
+            baseurl = 'http://127.0.0.1:' + port;
         }
 
         this.req = axios.create({
-          baseURL: baseurl+'/api',
-          timeout: 10000,
-          headers: (!isNode) ? {} : {'User-Agent': 'aw-client-js/0.1'}
+            baseURL: baseurl + '/api',
+            timeout: 10000,
+            headers: (!isNode) ? {} : { 'User-Agent': 'aw-client-js/0.1' }
         });
 
         // Make 304 not an error (necessary for create bucket requests)
@@ -52,7 +51,7 @@ class AWClient {
     }
 
     createBucket(bucket_id: string, type: string, hostname: string) {
-        return this.req.post('/0/buckets/'+bucket_id, {
+        return this.req.post('/0/buckets/' + bucket_id, {
             client: this.clientname,
             type: type,
             hostname: hostname,
@@ -60,7 +59,7 @@ class AWClient {
     }
 
     deleteBucket(bucket_id: string) {
-        return this.req.delete('/0/buckets/'+bucket_id+"?force=1");
+        return this.req.delete('/0/buckets/' + bucket_id + "?force=1");
     }
 
     getBuckets() {
@@ -72,15 +71,15 @@ class AWClient {
     }
 
     getEvents(bucket_id: string, params: { [k: string]: any }) {
-        return this.req.get("/0/buckets/" + bucket_id + "/events", {params: params});
+        return this.req.get("/0/buckets/" + bucket_id + "/events", { params: params });
     }
 
     getEventCount(bucket_id: string, starttime: string, endtime: string) {
-        let params = {
+        const params = {
             starttime: starttime,
             endtime: endtime,
-        }
-        return this.req.get("/0/buckets/" + bucket_id + "/events/count", {params: params});
+        };
+        return this.req.get("/0/buckets/" + bucket_id + "/events/count", { params: params });
     }
 
     insertEvent(bucket_id: string, event: Event) {
@@ -96,7 +95,7 @@ class AWClient {
     }
 
     query(timeperiods: Array<string>, query: Array<string>) {
-        let data = {timeperiods: timeperiods, query: query}
+        const data = { timeperiods: timeperiods, query: query };
         return this.req.post('/0/query/', data);
     }
 }
