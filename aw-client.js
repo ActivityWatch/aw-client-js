@@ -2,8 +2,12 @@
 
 const axios = require('axios');
 
-let isBrowser = (window !== undefined);
-
+let isBrowser = null;
+try {
+  isBrowser = (window !== undefined);
+} catch(e) {
+  isBrowser = false;
+}
 
 class AWClient {
     constructor(clientname, testing, baseurl) {
