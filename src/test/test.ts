@@ -1,12 +1,13 @@
-var assert = require('assert');
-const AWClient = require('../aw-client').AWClient;
+import * as assert from 'assert';
+import { AWClient, Event } from '../aw-client';
 
-var awc = new AWClient("aw-client-js-unittest", true);
+const awc = new AWClient("aw-client-js-unittest", true);
 
 
-testevent = {
-    'timestamp': '2016-08-09T14:35:10.363000+00:00',
-    'data': {
+const testevent: Event = {
+    timestamp: '2016-08-09T14:35:10.363000+00:00',
+    duration: 0,
+    data: {
         'label': 'this is a test label'
     }
 };

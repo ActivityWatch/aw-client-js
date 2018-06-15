@@ -5,8 +5,11 @@ AWPID=$!
 # Give aw-server some time to start
 sleep 5
 
+# Compile
+npm run compile
+
 # Run tests
-mocha
+mocha ./out/test/*.js
 EXITCODE=$?
 
 # Shutdown AW

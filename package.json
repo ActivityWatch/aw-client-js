@@ -7,13 +7,18 @@
     "test": "test"
   },
   "dependencies": {
-    "axios": "^0.16.2"
+    "axios": "^0.16.2",
+    "typescript": "^2.9.2",
+    "@types/node": "^7.0.43"
   },
   "devDependencies": {
-    "mocha": "^3.0.2"
+    "mocha": "^3.0.2",
+    "@types/mocha": "^2.2.42",
+    "tslint": "^5.8.0"
   },
   "scripts": {
-    "test": "./test.sh"
+    "compile": "tsc",
+    "test": "npm run compile && ./test.sh"
   },
   "repository": {
     "type": "git",
