@@ -11,6 +11,7 @@ Install dependencies
 
 ```sh
 npm install
+npm run compile
 ```
 
 ## Usage
