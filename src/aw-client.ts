@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosPromise } from 'axios';
 
 const isNode = (typeof module !== 'undefined' && module.exports);
 
@@ -103,12 +103,11 @@ class AWClient {
     }
 
     private send_heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
-        console.log('send_heartbeat')
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
     }
 
     // TODO: Make type AxiosPromise friendly
-    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat) {
+    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat): AxiosPromise {
         if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
             this.heartbeatQueues[bucket_id] = {
                 isProcessing: false,
