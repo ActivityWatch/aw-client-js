@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosPromise } from 'axios';
 
 const isNode = (typeof module !== 'undefined' && module.exports);
 
@@ -13,10 +13,24 @@ export interface Event extends Heartbeat {
     duration: number;
 }
 
+interface HeartbeatQueueItem {
+    onSuccess: Function;
+    onError: Function;
+    pulsetime: number;
+    heartbeat: Heartbeat;
+}
+
 class AWClient {
     public clientname: string;
     public testing: boolean;
     public req: AxiosInstance;
+
+    private heartbeatQueues: {
+        [bucket_id: string]: {
+            isProcessing: boolean;
+            data: Array<HeartbeatQueueItem>
+        }
+    } = {};
 
     constructor(clientname: string, testing: boolean, baseurl: string | undefined = undefined) {
         this.clientname = clientname;
@@ -90,8 +104,52 @@ class AWClient {
         return this.req.post('/0/buckets/' + bucket_id + "/events", events);
     }
 
-    heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
+    private send_heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
+    }
+
+    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat): AxiosPromise {
+        // Create heartbeat queue for bucket if not already existing
+        if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
+            this.heartbeatQueues[bucket_id] = {
+                isProcessing: false,
+                data: []
+            };
+        }
+
+        return new Promise((resolve, reject) => {
+            // Add heartbeat request to queue
+            this.heartbeatQueues[bucket_id].data.push({
+                onSuccess: resolve,
+                onError: reject,
+                pulsetime,
+                heartbeat
+            });
+
+            this.updateHeartbeatQueue(bucket_id);
+        });
+    }
+
+    // Start heartbeat queue processing if not currently processing
+    private updateHeartbeatQueue(bucket_id: string) {
+        const queue = this.heartbeatQueues[bucket_id];
+        
+        if (!queue.isProcessing && queue.data.length) {
+            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
+
+            queue.isProcessing = true;
+            this.send_heartbeat(bucket_id, pulsetime, heartbeat)
+                .then((response) => {
+                    onSuccess(response);
+                    queue.isProcessing = false;
+                    this.updateHeartbeatQueue(bucket_id);
+                })
+                .catch((response) => {
+                    onError(response);
+                    queue.isProcessing = false;
+                    this.updateHeartbeatQueue(bucket_id);
+                });
+        }
     }
 
     query(timeperiods: Array<string>, query: Array<string>) {
