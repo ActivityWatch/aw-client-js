@@ -106,7 +106,6 @@ class AWClient {
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
     }
 
-    // TODO: Make type AxiosPromise friendly
     heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat): AxiosPromise {
         if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
             this.heartbeatQueues[bucket_id] = {
@@ -117,7 +116,7 @@ class AWClient {
 
 
         return new Promise((resolve, reject) => {
-            
+            // Add heartbeat request to queue
             this.heartbeatQueues[bucket_id].data.push({
                 pulsetime,
                 onSuccess: resolve,
@@ -129,6 +128,7 @@ class AWClient {
         });
     }
 
+    // Start heartbeat queue processing if not currently processing
     private updateHeartbeatQueue(bucket_id: string) {
         const queue = this.heartbeatQueues[bucket_id];
         
