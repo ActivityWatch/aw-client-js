@@ -27,8 +27,11 @@ describe('All', function () {
         });
     });
 
-    before('Delete test bucket', () => {
-        return awc.deleteBucket(bucketId);
+    before('Delete test bucket', (done) => {
+        // Delete bucket if it exists
+        awc.deleteBucket(bucketId)
+            .then(() => done())
+            .catch(({ status }) => (status === 404 && done()) || done(false));
     })
 
     // Make sure the test bucket exists before each test case
