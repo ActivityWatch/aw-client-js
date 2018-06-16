@@ -109,13 +109,13 @@ class AWClient {
     }
 
     heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat): AxiosPromise {
+        // Create heartbeat queue for bucket if not already existing
         if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
             this.heartbeatQueues[bucket_id] = {
                 isProcessing: false,
                 data: []
             };
         }
-
 
         return new Promise((resolve, reject) => {
             // Add heartbeat request to queue
