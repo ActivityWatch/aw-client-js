@@ -18,6 +18,18 @@ class AWClient {
     public testing: boolean;
     public req: AxiosInstance;
 
+    private heartbeatQueues: {
+        [bucket_id: string]: {
+            isProcessing: boolean;
+            data: Array<{
+                onSuccess: Function,
+                onError: Function,
+                pulsetime: number;
+                heartbeat: Heartbeat;
+            }>
+        }
+    } = {};
+
     constructor(clientname: string, testing: boolean, baseurl: string | undefined = undefined) {
         this.clientname = clientname;
         this.testing = testing;
@@ -90,8 +102,58 @@ class AWClient {
         return this.req.post('/0/buckets/' + bucket_id + "/events", events);
     }
 
-    heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
+    private send_heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
+        console.log('send_heartbeat')
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
+    }
+
+    // TODO: Make type AxiosPromise friendly
+    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat) {
+        if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
+            this.heartbeatQueues[bucket_id] = {
+                isProcessing: false,
+                data: []
+            };
+        }
+
+
+        return new Promise((resolve, reject) => {
+            
+            this.heartbeatQueues[bucket_id].data.push({
+                pulsetime,
+                onSuccess: resolve,
+                onError: reject,
+                heartbeat
+            });
+
+            this.updateHeartbeatQueue(bucket_id);
+        });
+    }
+
+    private updateHeartbeatQueue(bucket_id: string) {
+        const queue = this.heartbeatQueues[bucket_id];
+        
+        if (!queue.isProcessing && queue.data.length) {
+            const oldestHeartbeatData = queue.data.shift();
+            if (!oldestHeartbeatData) {
+                return;
+            }
+
+            const { pulsetime, heartbeat, onSuccess, onError } = oldestHeartbeatData;
+
+            queue.isProcessing = true;
+            this.send_heartbeat(bucket_id, pulsetime, heartbeat)
+                .then((...args: any[]) => {
+                    onSuccess(...args);
+                    queue.isProcessing = false;
+                    this.updateHeartbeatQueue(bucket_id);
+                })
+                .catch((...args: any[]) => {
+                    onError(...args);
+                    queue.isProcessing = false;
+                    this.updateHeartbeatQueue(bucket_id);
+                })
+        }
     }
 
     query(timeperiods: Array<string>, query: Array<string>) {
