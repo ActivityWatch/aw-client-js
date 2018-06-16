@@ -77,10 +77,8 @@ describe('All', function () {
 
             return awc.heartbeat(bucketId, 5, newEvent)
         }))
-            .then(resp => {
-                const firstResponse = resp[0];
+            .then(([ firstResponse ]) => {
                 console.log(firstResponse.data);
-                // assert.equal(testevent['timestamp'], firstResponse.data['timestamp']);
                 assert.equal(testevent['data']['label'], firstResponse.data['data']['label']);
                 done();
             })
