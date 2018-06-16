@@ -13,6 +13,13 @@ export interface Event extends Heartbeat {
     duration: number;
 }
 
+interface HeartbeatQueueItem {
+    onSuccess: Function;
+    onError: Function;
+    pulsetime: number;
+    heartbeat: Heartbeat;
+}
+
 class AWClient {
     public clientname: string;
     public testing: boolean;
@@ -21,12 +28,7 @@ class AWClient {
     private heartbeatQueues: {
         [bucket_id: string]: {
             isProcessing: boolean;
-            data: Array<{
-                onSuccess: Function,
-                onError: Function,
-                pulsetime: number;
-                heartbeat: Heartbeat;
-            }>
+            data: Array<HeartbeatQueueItem>
         }
     } = {};
 
@@ -118,9 +120,9 @@ class AWClient {
         return new Promise((resolve, reject) => {
             // Add heartbeat request to queue
             this.heartbeatQueues[bucket_id].data.push({
-                pulsetime,
                 onSuccess: resolve,
                 onError: reject,
+                pulsetime,
                 heartbeat
             });
 
@@ -133,25 +135,20 @@ class AWClient {
         const queue = this.heartbeatQueues[bucket_id];
         
         if (!queue.isProcessing && queue.data.length) {
-            const oldestHeartbeatData = queue.data.shift();
-            if (!oldestHeartbeatData) {
-                return;
-            }
-
-            const { pulsetime, heartbeat, onSuccess, onError } = oldestHeartbeatData;
+            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
 
             queue.isProcessing = true;
             this.send_heartbeat(bucket_id, pulsetime, heartbeat)
-                .then((...args: any[]) => {
-                    onSuccess(...args);
+                .then((response) => {
+                    onSuccess(response);
                     queue.isProcessing = false;
                     this.updateHeartbeatQueue(bucket_id);
                 })
-                .catch((...args: any[]) => {
-                    onError(...args);
+                .catch((response) => {
+                    onError(response);
                     queue.isProcessing = false;
                     this.updateHeartbeatQueue(bucket_id);
-                })
+                });
         }
     }
 
