@@ -27,10 +27,13 @@ describe('All', function () {
         });
     });
 
+    before('Delete test bucket', () => {
+        return awc.deleteBucket(bucketId);
+    })
+
     // Make sure the test bucket exists before each test case
-    beforeEach(function createTestBucket(done) {
-        awc.createBucket(bucketId, eventType, hostname)
-            .then(() => done());
+    beforeEach('Create test bucket', () => {
+        return awc.createBucket(bucketId, eventType, hostname);
     });
 
     it('Post event, get event and assert', (done) => {
@@ -60,12 +63,28 @@ describe('All', function () {
     });
 
     it('Heartbeat', (done) => {
-        awc.heartbeat(bucketId, 5, testevent).then((resp) => {
-            console.log(resp.data);
-            assert.equal(testevent['timestamp'], resp.data['timestamp']);
-            assert.equal(testevent['data']['label'], resp.data['data']['label']);
-            done();
-        });
+        // Send 10 heartbeat events with little time difference one after another (for testing the queue)
+        Promise.all(Array.from({ length: 10 }, (v, index) => {
+            const { timestamp, ...event } = testevent;
+            const curTimestamp = (new Date()).toISOString();
+            const newEvent = {
+                timestamp: curTimestamp,
+                ...event
+            };
+
+            return awc.heartbeat(bucketId, 5, newEvent)
+        }))
+            .then(resp => {
+                const firstResponse = resp[0];
+                console.log(firstResponse.data);
+                // assert.equal(testevent['timestamp'], firstResponse.data['timestamp']);
+                assert.equal(testevent['data']['label'], firstResponse.data['data']['label']);
+                done();
+            })
+            .catch(err => {
+                console.error(err);
+                done(false);
+            });
     });
 
     it('Query', (done) => {
