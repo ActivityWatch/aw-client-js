@@ -19,6 +19,7 @@ export interface AppEditorActivityHeartbeat extends Heartbeat {
         project: string;    // Path to the current project / workDir
         file: string;       // Path to the current file
         language: string;   // Coding Language identifier (e.g. javascript, python, ...)
+        [k: string]: any;   // Additional (custom) data
     }
 }
 export interface AppEditorActivityEvent extends AppEditorActivityHeartbeat {
