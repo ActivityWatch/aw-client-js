@@ -2,14 +2,27 @@ import axios, { AxiosInstance, AxiosPromise } from 'axios';
 
 const isNode = (typeof module !== 'undefined' && module.exports);
 
+// Default interfaces for events and heartbeats
 export interface Heartbeat {
     id?: number;
     timestamp: string;    // timestamp as iso8601 string
     duration?: number;    // duration in seconds
     data: { [k: string]: any };
 }
-
 export interface Event extends Heartbeat {
+    duration: number;
+}
+
+// Interfaces for coding activity
+export interface AppEditorActivityHeartbeat extends Heartbeat {
+    data: {
+        project: string;    // Path to the current project / workDir
+        file: string;       // Path to the current file
+        language: string;   // Coding Language identifier (e.g. javascript, python, ...)
+        [k: string]: any;   // Additional (custom) data
+    }
+}
+export interface AppEditorActivityEvent extends AppEditorActivityHeartbeat {
     duration: number;
 }
 
