@@ -35,6 +35,7 @@ interface HeartbeatQueueItem {
 
 class AWClient {
     public clientname: string;
+    public baseURL: string;
     public testing: boolean;
     public req: AxiosInstance;
 
@@ -52,6 +53,7 @@ class AWClient {
             const port = !testing ? 5600 : 5666;
             baseurl = 'http://127.0.0.1:' + port;
         }
+        this.baseURL = baseurl;
 
         this.req = axios.create({
             baseURL: baseurl + '/api',
@@ -146,7 +148,7 @@ class AWClient {
     // Start heartbeat queue processing if not currently processing
     private updateHeartbeatQueue(bucket_id: string) {
         const queue = this.heartbeatQueues[bucket_id];
-        
+
         if (!queue.isProcessing && queue.data.length) {
             const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
 
