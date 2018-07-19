@@ -17,7 +17,7 @@
     "typescript": "^2.9.2"
   },
   "scripts": {
-    "compile": "(rm -rf out || true) && tsc",
+    "compile": "tsc",
     "test": "./test.sh",
     "prepare": "npm run compile && npm run test"
   },
