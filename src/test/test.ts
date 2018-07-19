@@ -8,68 +8,85 @@ const hostname = 'unknown';
 
 // Create client
 const clientName = 'aw-client-js-unittest';
-const awc = new AWClient(clientName, true);
+const awc = new AWClient(clientName, {
+  testing: true
+});
 
 const testevent: Event = {
-    timestamp: '2016-08-09T14:35:10.363000+00:00',
+    timestamp: new Date(),
     duration: 0,
     data: {
-        'label': 'this is a test label'
+        label: 'this is a test label'
     }
 };
 
 describe('All', function () {
-    it('info', (done) => {
-        awc.info().then((resp) => {
-            console.log(resp.data);
-            assert.equal(resp.data.testing, true);
-            done();
-        });
-    });
-
-    before('Delete test bucket', (done) => {
+    before('Delete test bucket', () => {
         // Delete bucket if it exists
-        awc.deleteBucket(bucketId)
-            .then(() => done())
-            .catch(({ status }) => (status === 404 && done()) || done(false));
+        return awc.deleteBucket(bucketId)
+            .catch((err) => {
+              if (err && err.response.status === 404) {
+                return 'ok'
+              }
+              throw err
+            });
     })
 
     // Make sure the test bucket exists before each test case
     beforeEach('Create test bucket', () => {
-        return awc.createBucket(bucketId, eventType, hostname);
+        return awc.ensureBucket(bucketId, eventType, hostname);
     });
 
-    it('Post event, get event and assert', (done) => {
-        awc.insertEvent(bucketId, testevent).then((resp) => {
-            awc.getEvents(bucketId, { limit: 1 }).then((resp) => {
-                console.log(resp.data);
-                assert.equal(testevent['timestamp'], resp.data[0]['timestamp']);
-                assert.equal(testevent['data']['label'], resp.data[0]['data']['label']);
-                done();
-            });
+    it('info', () => {
+        return awc.getInfo().then((resp) => {
+            console.log('info', resp);
+            assert.equal(resp.testing, true);
         });
     });
 
-    it('Create, delete and get buckets', (done) => {
+    it('Post event, get event and assert', () => {
+        return awc.insertEvent(bucketId, testevent).then((resp) => {
+            console.log('insertEvent', resp);
+            return awc.getEvents(bucketId, { limit: 1 })
+        })
+        .then((resp) => {
+            console.log('getEvents', resp);
+            assert.equal(testevent['timestamp'].toISOString(), resp[0]['timestamp'].toISOString());
+            assert.equal(testevent['data']['label'], resp[0]['data']['label']);
+        })
+    });
+
+    it('Create, delete and get buckets', () => {
         /* Create -> getBucketInfo and verify -> delete -> getBuckets and verify */
-        awc.createBucket(bucketId, eventType, hostname).then((resp) => {
-            awc.getBucketInfo(bucketId).then((resp) => {
-                assert.equal(clientName, resp.data['client']);
-                awc.deleteBucket(bucketId).then((resp) => {
-                    awc.getBuckets().then((resp) => {
-                        assert.equal(false, bucketId in resp.data)
-                        done();
-                    });
-                });
-            });
-        });
+        return awc.ensureBucket(bucketId, eventType, hostname)
+        .then(() => awc.getBuckets())
+        .then((resp) => {
+            console.log('getBuckets', resp)
+            assert.equal(true, bucketId in resp)
+        })
+        .then(() => {
+            return awc.getBucketInfo(bucketId)
+        })
+        .then((resp) => {
+            console.log('getBucketInfo', resp)
+            assert.equal(resp.created instanceof Date, true);
+            assert.equal(clientName, resp['client']);
+            return awc.deleteBucket(bucketId)
+        })
+        .then(() => {
+          return awc.getBuckets()
+        })
+        .then((resp) => {
+            console.log('getBuckets', resp)
+            assert.equal(false, bucketId in resp)
+        })
     });
 
-    it('Heartbeat', (done) => {
+    it('Heartbeat', () => {
         // Send 10 heartbeat events with little time difference one after another (for testing the queue)
-        Promise.all(Array.from({ length: 10 }, (v, index) => {
+        return Promise.all(Array.from({ length: 10 }, (v, index) => {
             const { timestamp, ...event } = testevent;
-            const curTimestamp = (new Date()).toISOString();
+            const curTimestamp = new Date();
             const newEvent = {
                 timestamp: curTimestamp,
                 ...event
@@ -77,30 +94,25 @@ describe('All', function () {
 
             return awc.heartbeat(bucketId, 5, newEvent)
         }))
-            .then(([ firstResponse ]) => {
-                console.log(firstResponse.data);
-                assert.equal(testevent['data']['label'], firstResponse.data['data']['label']);
-                done();
-            })
-            .catch(err => {
-                console.error(err);
-                done(false);
-            });
+        .then(([ firstResponse ]) => {
+            console.log('heartbeat', firstResponse);
+            assert.equal(testevent['data']['label'], firstResponse['data']['label']);
+        });
     });
 
-    it('Query', (done) => {
-        awc.heartbeat(bucketId, 5, testevent).then((resp) => {
-            let timeperiods = [testevent.timestamp + "/" + testevent.timestamp];
+    it('Query', () => {
+        return awc.heartbeat(bucketId, 5, testevent).then(() => {
+            let timeperiods = [{start: testevent.timestamp, end: testevent.timestamp}];
             let query = [
                 `bucket="${bucketId}";`,
                 "RETURN=query_bucket(bucket);"
             ];
-            awc.query(timeperiods, query).then((resp) => {
-                console.log(resp.data);
-                assert.equal(testevent['timestamp'], resp.data[0][0]['timestamp']);
-                assert.equal(testevent['data']['label'], resp.data[0][0]['data']['label']);
-                done();
-            });
+            return awc.query(timeperiods, query)
+        })
+        .then((resp) => {
+            console.log('query', resp);
+            assert.equal(testevent['timestamp'].toISOString(), new Date(resp[0][0]['timestamp']).toISOString());
+            assert.equal(testevent['data']['label'], resp[0][0]['data']['label']);
         });
     });
 });

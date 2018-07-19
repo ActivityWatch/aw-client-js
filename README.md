@@ -1,30 +1,38 @@
-aw-client-js
-============
+# aw-client-js
 
-Client library for ActivityWatch in JavaScript.
+Client library for [ActivityWatch](http://activitywatch.net) in JavaScript.
 
 [![Build Status](https://travis-ci.org/ActivityWatch/aw-client-js.svg?branch=master)](https://travis-ci.org/ActivityWatch/aw-client-js)
 
 ## Install
 
-Install dependencies
-
 ```sh
-npm install
-npm run compile
+npm install activity-watch-client
 ```
 
 ## Usage
 
-include as a library
-
 ```javascript
-const aw_client = require('aw-client');
+const { AWClient } = require('activity-watch-client');
+
+const client = new AWCLient(myClientName)
 ```
 
-## Test
+## Contribute
 
-Run unit tests
+### Setup your dev environment
+
+```sh
+npm install
+```
+
+### Build the library
+
+```sh
+npm run compile
+```
+
+### Run the tests
 
 ```sh
 npm run test

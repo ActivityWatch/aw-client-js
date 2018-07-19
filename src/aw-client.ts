@@ -1,9 +1,9 @@
-import axios, { AxiosInstance, AxiosPromise } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // Default interfaces for events and heartbeats
 export interface Heartbeat {
     id?: number;
-    timestamp: string;    // timestamp as iso8601 string
+    timestamp: Date;
     duration?: number;    // duration in seconds
     data: { [k: string]: any };
 }
@@ -24,14 +24,24 @@ export interface AppEditorActivityEvent extends AppEditorActivityHeartbeat {
     duration: number;
 }
 
+export interface Bucket {
+  id: string,
+  name: string,
+  type: string,
+  client: string,
+  hostname: string,
+  created: Date
+  last_update?: Date
+}
+
 interface HeartbeatQueueItem {
-    onSuccess: Function;
-    onError: Function;
-    pulsetime: number;
+    onSuccess: (heartbeat: Heartbeat) => void;
+    onError: (err: AxiosError) => void;
+    pulseTime: number;
     heartbeat: Heartbeat;
 }
 
-class AWClient {
+export class AWClient {
     public clientname: string;
     public baseURL: string;
     public testing: boolean;
@@ -44,86 +54,129 @@ class AWClient {
         }
     } = {};
 
-    constructor(clientname: string, testing: boolean, baseurl: string | undefined = undefined) {
-        this.clientname = clientname;
-        this.testing = testing;
-        if (baseurl == undefined) {
-            const port = !testing ? 5600 : 5666;
-            baseurl = 'http://127.0.0.1:' + port;
+    constructor(clientname: string, options?: {testing?: boolean, baseURL?: string}) {
+        if (!options) {
+          options = {}
         }
-        this.baseURL = baseurl;
+        this.clientname = clientname;
+        this.testing = options.testing || false;
+        if (typeof options.baseURL === 'undefined') {
+            const port = !options.testing ? 5600 : 5666;
+            this.baseURL = 'http://127.0.0.1:' + port;
+        } else {
+          this.baseURL = options.baseURL;
+        }
+
 
         this.req = axios.create({
-            baseURL: baseurl + '/api',
+            baseURL: this.baseURL + '/api',
             timeout: 10000,
         });
-
-        // Make 304 not an error (necessary for create bucket requests)
-        this.req.interceptors.response.use(
-            response => {
-                return response;
-            }, err => {
-                if (err && err.response && err.response.status == 304) {
-                    return err.data;
-                } else {
-                    return Promise.reject(err);
-                }
-            }
-        );
     }
 
-    info() {
-        return this.req.get('/0/info');
+    getInfo(): Promise<{
+      hostname: string,
+      version: string,
+      testing: boolean
+    }> {
+        return this.req.get('/0/info').then(res => res.data);
     }
 
-    createBucket(bucket_id: string, type: string, hostname: string) {
-        return this.req.post('/0/buckets/' + bucket_id, {
+    ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
+      return this.req.post('/0/buckets/' + bucketId, {
+          client: this.clientname,
+          type,
+          hostname,
+      }).then(() => ({alreadyExist: false})).catch(err => {
+        // Will return 304 if bucket already exists
+        if (err && err.response && err.response.status == 304) {
+          return {alreadyExist: true};
+        }
+        throw err
+      });
+  }
+
+    createBucket(bucketId: string, type: string, hostname: string) {
+        return this.req.post('/0/buckets/' + bucketId, {
             client: this.clientname,
-            type: type,
-            hostname: hostname,
+            type,
+            hostname,
+        }).then(() => undefined);
+    }
+
+    deleteBucket(bucketId: string) {
+        return this.req.delete('/0/buckets/' + bucketId + "?force=1").then(() => undefined);
+    }
+
+    getBuckets(): Promise<{[bucketId: string]: Bucket}> {
+        return this.req.get("/0/buckets/")
+        .then(res => res.data)
+        .then(buckets => {
+          Object.keys(buckets).forEach(bucket => {
+            buckets[bucket].created = new Date(buckets[bucket].created)
+            if (buckets[bucket].last_updated) {
+              buckets[bucket].last_updated = new Date(buckets[bucket].last_updated)
+            }
+          })
+          return buckets
         });
     }
 
-    deleteBucket(bucket_id: string) {
-        return this.req.delete('/0/buckets/' + bucket_id + "?force=1");
+    getBucketInfo(bucketId: string): Promise<Bucket> {
+        return this.req.get("/0/buckets/" + bucketId)
+        .then(res => res.data)
+        .then(bucket => {
+          bucket.created = new Date(bucket.created)
+          return bucket
+        });
     }
 
-    getBuckets() {
-        return this.req.get("/0/buckets/");
+    getEvents(bucketId: string, params: { [k: string]: any }): Promise<Array<Event>> {
+        return this.req.get("/0/buckets/" + bucketId + "/events", { params }).then(res => res.data)
+        .then(events => {
+          events.forEach((event: Event) => {
+            event.timestamp = new Date(event.timestamp)
+          })
+          return events
+        });
     }
 
-    getBucketInfo(bucket_id: string) {
-        return this.req.get("/0/buckets/" + bucket_id);
-    }
-
-    getEvents(bucket_id: string, params: { [k: string]: any }) {
-        return this.req.get("/0/buckets/" + bucket_id + "/events", { params: params });
-    }
-
-    getEventCount(bucket_id: string, starttime: string, endtime: string) {
+    countEvents(bucketId: string, startTime: Date, endTime: Date) {
         const params = {
-            starttime: starttime,
-            endtime: endtime,
+            starttime: startTime.toISOString(),
+            endtime: endTime.toISOString(),
         };
-        return this.req.get("/0/buckets/" + bucket_id + "/events/count", { params: params });
+        return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
     }
 
-    insertEvent(bucket_id: string, event: Event) {
-        return this.insertEvents(bucket_id, [event]);
+    insertEvent(bucketId: string, event: Event) {
+        return this.insertEvents(bucketId, [event]).then(events => events[0]);
     }
 
-    insertEvents(bucket_id: string, events: Array<Event>) {
-        return this.req.post('/0/buckets/' + bucket_id + "/events", events);
+    insertEvents(bucketId: string, events: Array<Event>): Promise<Array<Event>> {
+        return this.req.post('/0/buckets/' + bucketId + "/events", events)
+        .then(res => res.data)
+        .then(events => {
+          if (!Array.isArray(events)) {
+            events = [events]
+          }
+          events.forEach((event: Event) => {
+            event.timestamp = new Date(event.timestamp)
+          })
+          return events
+        });
     }
 
-    private send_heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
-        return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
-    }
-
-    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat): AxiosPromise {
+    /**
+     *
+     * @param bucketId The id of the bucket to send the heartbeat to
+     * @param pulseTime The maximum amount of time in seconds since the last heartbeat to be merged with the previous heartbeat in aw-server
+     * @param heartbeat The actual heartbeat event
+     */
+    heartbeat(bucketId: string, pulseTime: number, heartbeat: Heartbeat): Promise<Heartbeat> {
         // Create heartbeat queue for bucket if not already existing
-        if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
-            this.heartbeatQueues[bucket_id] = {
+        if (!this.heartbeatQueues.hasOwnProperty(bucketId)) {
+            this.heartbeatQueues[bucketId] = {
                 isProcessing: false,
                 data: []
             };
@@ -131,43 +184,52 @@ class AWClient {
 
         return new Promise((resolve, reject) => {
             // Add heartbeat request to queue
-            this.heartbeatQueues[bucket_id].data.push({
+            this.heartbeatQueues[bucketId].data.push({
                 onSuccess: resolve,
                 onError: reject,
-                pulsetime,
+                pulseTime,
                 heartbeat
             });
 
-            this.updateHeartbeatQueue(bucket_id);
+            this.updateHeartbeatQueue(bucketId);
+        });
+    }
+
+    private send_heartbeat(bucketId: string, pulseTime: number, data: Heartbeat): Promise<Heartbeat> {
+        return this.req.post('/0/buckets/' + bucketId + "/heartbeat?pulsetime=" + pulseTime, data)
+        .then(res => res.data)
+        .then(heartbeat => {
+          heartbeat.timestamp = new Date(heartbeat.timestamp)
+          return heartbeat
         });
     }
 
     // Start heartbeat queue processing if not currently processing
-    private updateHeartbeatQueue(bucket_id: string) {
-        const queue = this.heartbeatQueues[bucket_id];
+    private updateHeartbeatQueue(bucketId: string) {
+        const queue = this.heartbeatQueues[bucketId];
 
         if (!queue.isProcessing && queue.data.length) {
-            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
+            const { pulseTime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
 
             queue.isProcessing = true;
-            this.send_heartbeat(bucket_id, pulsetime, heartbeat)
+            this.send_heartbeat(bucketId, pulseTime, heartbeat)
                 .then((response) => {
                     onSuccess(response);
                     queue.isProcessing = false;
-                    this.updateHeartbeatQueue(bucket_id);
+                    this.updateHeartbeatQueue(bucketId);
                 })
                 .catch((response) => {
                     onError(response);
                     queue.isProcessing = false;
-                    this.updateHeartbeatQueue(bucket_id);
+                    this.updateHeartbeatQueue(bucketId);
                 });
         }
     }
 
-    query(timeperiods: Array<string>, query: Array<string>) {
-        const data = { timeperiods: timeperiods, query: query };
-        return this.req.post('/0/query/', data);
+    query(timePeriods: Array<{start: Date, end: Date}>, query: Array<string>): Promise<any> {
+        const data = { timeperiods: timePeriods.map((({start, end}) => {
+          return `${start.toISOString()}/${end.toISOString()}`
+        })), query };
+        return this.req.post('/0/query/', data).then(res => res.data);
     }
 }
-
-export { AWClient };

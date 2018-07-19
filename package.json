@@ -1,24 +1,25 @@
 {
-  "name": "aw-client-js",
+  "name": "activity-watch-client",
   "version": "0.1.0",
   "description": "An ActivityWatch client library for JavaScript/NodeJS",
-  "main": "aw-client.js",
-  "directories": {
-    "test": "test"
-  },
+  "main": "out/aw-client.js",
+  "files": [
+    "out"
+  ],
   "dependencies": {
-    "axios": "^0.16.2",
-    "typescript": "^2.9.2",
-    "@types/node": "^7.0.43"
+    "axios": "^0.16.2"
   },
   "devDependencies": {
     "@types/mocha": "^2.2.42",
+    "@types/node": "^7.0.43",
     "mocha": "^5.2.0",
-    "tslint": "^5.8.0"
+    "tslint": "^5.8.0",
+    "typescript": "^2.9.2"
   },
   "scripts": {
-    "compile": "tsc",
-    "test": "./test.sh"
+    "compile": "(rm -rf out || true) && tsc",
+    "test": "./test.sh",
+    "prepare": "npm run compile && npm run test"
   },
   "repository": {
     "type": "git",
