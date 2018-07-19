@@ -54,7 +54,7 @@ export class AWClient {
         }
     } = {};
 
-    constructor(clientname: string, options?: {testing?: boolean, baseURL?: string} = {}) {
+    constructor(clientname: string, options: {testing?: boolean, baseURL?: string} = {}) {
         this.clientname = clientname;
         this.testing = options.testing || false;
         if (typeof options.baseURL === 'undefined') {
