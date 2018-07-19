@@ -37,7 +37,7 @@ export interface Bucket {
 interface HeartbeatQueueItem {
     onSuccess: (heartbeat: Heartbeat) => void;
     onError: (err: AxiosError) => void;
-    pulseTime: number;
+    pulsetime: number;
     heartbeat: Heartbeat;
 }
 
@@ -170,10 +170,10 @@ export class AWClient {
     /**
      *
      * @param bucketId The id of the bucket to send the heartbeat to
-     * @param pulseTime The maximum amount of time in seconds since the last heartbeat to be merged with the previous heartbeat in aw-server
+     * @param pulsetime The maximum amount of time in seconds since the last heartbeat to be merged with the previous heartbeat in aw-server
      * @param heartbeat The actual heartbeat event
      */
-    heartbeat(bucketId: string, pulseTime: number, heartbeat: Heartbeat): Promise<Heartbeat> {
+    heartbeat(bucketId: string, pulsetime: number, heartbeat: Heartbeat): Promise<Heartbeat> {
         // Create heartbeat queue for bucket if not already existing
         if (!this.heartbeatQueues.hasOwnProperty(bucketId)) {
             this.heartbeatQueues[bucketId] = {
@@ -187,7 +187,7 @@ export class AWClient {
             this.heartbeatQueues[bucketId].data.push({
                 onSuccess: resolve,
                 onError: reject,
-                pulseTime,
+                pulsetime,
                 heartbeat
             });
 
@@ -195,8 +195,8 @@ export class AWClient {
         });
     }
 
-    private send_heartbeat(bucketId: string, pulseTime: number, data: Heartbeat): Promise<Heartbeat> {
-        return this.req.post('/0/buckets/' + bucketId + "/heartbeat?pulsetime=" + pulseTime, data)
+    private send_heartbeat(bucketId: string, pulsetime: number, data: Heartbeat): Promise<Heartbeat> {
+        return this.req.post('/0/buckets/' + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)
         .then(res => res.data)
         .then(heartbeat => {
           heartbeat.timestamp = new Date(heartbeat.timestamp)
@@ -209,10 +209,10 @@ export class AWClient {
         const queue = this.heartbeatQueues[bucketId];
 
         if (!queue.isProcessing && queue.data.length) {
-            const { pulseTime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
+            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
 
             queue.isProcessing = true;
-            this.send_heartbeat(bucketId, pulseTime, heartbeat)
+            this.send_heartbeat(bucketId, pulsetime, heartbeat)
                 .then((response) => {
                     onSuccess(response);
                     queue.isProcessing = false;
