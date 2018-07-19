@@ -1,5 +1,5 @@
 {
-  "name": "activity-watch-client",
+  "name": "aw-client",
   "version": "0.1.0",
   "description": "An ActivityWatch client library for JavaScript/NodeJS",
   "main": "out/aw-client.js",

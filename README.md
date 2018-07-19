@@ -7,15 +7,15 @@ Client library for [ActivityWatch](http://activitywatch.net) in JavaScript.
 ## Install
 
 ```sh
-npm install activity-watch-client
+npm install aw-client
 ```
 
 ## Usage
 
 ```javascript
-const { AWClient } = require('activity-watch-client');
+const { AWClient } = require('aw-client');
 
-const client = new AWCLient(myClientName)
+const client = new AWClient(myClientName)
 ```
 
 ## Contribute
