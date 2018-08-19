@@ -138,10 +138,10 @@ export class AWClient {
         });
     }
 
-    countEvents(bucketId: string, startTime: Date, endTime: Date) {
+    countEvents(bucketId: string, startTime?: Date, endTime?: Date) {
         const params = {
-            starttime: startTime.toISOString(),
-            endtime: endTime.toISOString(),
+            starttime: startTime ? startTime.toISOString() : null,
+            endtime: endTime ? endTime.toISOString() : null,
         };
         return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
     }
