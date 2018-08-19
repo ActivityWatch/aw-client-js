@@ -1,20 +1,18 @@
-import axios, { AxiosInstance, AxiosPromise } from 'axios';
+import axios from 'axios';
+import { AxiosInstance, AxiosPromise } from 'axios';
 
 const isNode = (typeof module !== 'undefined' && module.exports);
 
-// Default interfaces for events and heartbeats
-export interface Heartbeat {
+// Default interface for events
+export interface Event {
     id?: number;
     timestamp: string;    // timestamp as iso8601 string
     duration?: number;    // duration in seconds
     data: { [k: string]: any };
 }
-export interface Event extends Heartbeat {
-    duration: number;
-}
 
 // Interfaces for coding activity
-export interface AppEditorActivityHeartbeat extends Heartbeat {
+export interface AppEditorEvent extends Event {
     data: {
         project: string;    // Path to the current project / workDir
         file: string;       // Path to the current file
@@ -22,15 +20,12 @@ export interface AppEditorActivityHeartbeat extends Heartbeat {
         [k: string]: any;   // Additional (custom) data
     }
 }
-export interface AppEditorActivityEvent extends AppEditorActivityHeartbeat {
-    duration: number;
-}
 
 interface HeartbeatQueueItem {
     onSuccess: Function;
     onError: Function;
     pulsetime: number;
-    heartbeat: Heartbeat;
+    heartbeat: Event;
 }
 
 class AWClient {
@@ -119,11 +114,11 @@ class AWClient {
         return this.req.post('/0/buckets/' + bucket_id + "/events", events);
     }
 
-    private send_heartbeat(bucket_id: string, pulsetime: number, data: Heartbeat) {
+    private send_heartbeat(bucket_id: string, pulsetime: number, data: Event) {
         return this.req.post('/0/buckets/' + bucket_id + "/heartbeat?pulsetime=" + pulsetime, data);
     }
 
-    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Heartbeat): AxiosPromise {
+    heartbeat(bucket_id: string, pulsetime: number, heartbeat: Event): AxiosPromise {
         // Create heartbeat queue for bucket if not already existing
         if (!this.heartbeatQueues.hasOwnProperty(bucket_id)) {
             this.heartbeatQueues[bucket_id] = {
