@@ -223,8 +223,11 @@ export class AWClient {
         }
     }
 
-    async query(timeperiods: Array<string>, query: Array<string>): Promise<any> {
-        const data = { timeperiods, query };
+    async query(timeperiods: Array<string|{start: Date, end: Date}>, query: Array<string>): Promise<any> {
+        const data = {
+            query,
+            timeperiods: timeperiods.map(tp => (typeof tp !== "string" ? `${tp.start.toISOString()}/${tp.end.toISOString()}` : tp))
+        };
         return (await this.req.post('/0/query/', data)).data;
     }
 }
