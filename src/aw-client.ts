@@ -223,10 +223,8 @@ export class AWClient {
         }
     }
 
-    query(timePeriods: Array<{start: Date, end: Date}>, query: Array<string>): Promise<any> {
-        const data = { timeperiods: timePeriods.map((({start, end}) => {
-          return `${start.toISOString()}/${end.toISOString()}`
-        })), query };
-        return this.req.post('/0/query/', data).then(res => res.data);
+    async query(timeperiods: Array<string>, query: Array<string>): Promise<any> {
+        const data = { timeperiods, query };
+        return (await this.req.post('/0/query/', data)).data;
     }
 }

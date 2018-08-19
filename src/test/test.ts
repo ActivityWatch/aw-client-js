@@ -102,7 +102,7 @@ describe('All', function () {
 
     it('Query', () => {
         return awc.heartbeat(bucketId, 5, testevent).then(() => {
-            let timeperiods = [{start: testevent.timestamp, end: testevent.timestamp}];
+            let timeperiods = [`${testevent.timestamp}/${testevent.timestamp}`];
             let query = [
                 `bucket="${bucketId}";`,
                 "RETURN=query_bucket(bucket);"
