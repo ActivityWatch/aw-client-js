@@ -100,19 +100,20 @@ describe('All', function () {
         });
     });
 
-    it('Query', () => {
-        return awc.heartbeat(bucketId, 5, testevent).then(() => {
-            let timeperiods = [{start: testevent.timestamp, end: testevent.timestamp}];
-            let query = [
-                `bucket="${bucketId}";`,
-                "RETURN=query_bucket(bucket);"
-            ];
-            return awc.query(timeperiods, query)
-        })
-        .then((resp) => {
-            console.log('query', resp);
-            assert.equal(testevent['timestamp'].toISOString(), new Date(resp[0][0]['timestamp']).toISOString());
-            assert.equal(testevent['data']['label'], resp[0][0]['data']['label']);
-        });
+    it('Query', async () => {
+        await awc.heartbeat(bucketId, 5, testevent);
+        // Both these are valid timeperiod specs
+        let timeperiods = [
+            {start: testevent.timestamp, end: testevent.timestamp},
+            `${testevent.timestamp.toISOString()}/${testevent.timestamp.toISOString()}`
+        ];
+        let query = [
+            `bucket="${bucketId}";`,
+            "RETURN=query_bucket(bucket);"
+        ];
+        let resp = await awc.query(timeperiods, query);
+        console.log('query', resp);
+        assert.equal(testevent['timestamp'].toISOString(), new Date(resp[0][0]['timestamp']).toISOString());
+        assert.equal(testevent['data']['label'], resp[0][0]['data']['label']);
     });
 });
