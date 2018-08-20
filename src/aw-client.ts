@@ -1,27 +1,22 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios from 'axios';
+import { AxiosInstance, AxiosError } from 'axios';
 
-// Default interfaces for events and heartbeats
-export interface Heartbeat {
+// Default interface for events
+export interface Event {
     id?: number;
     timestamp: Date;
     duration?: number;    // duration in seconds
     data: { [k: string]: any };
 }
-export interface Event extends Heartbeat {
-    duration: number;
-}
 
 // Interfaces for coding activity
-export interface AppEditorActivityHeartbeat extends Heartbeat {
+export interface AppEditorEvent extends Event {
     data: {
         project: string;    // Path to the current project / workDir
         file: string;       // Path to the current file
         language: string;   // Coding Language identifier (e.g. javascript, python, ...)
         [k: string]: any;   // Additional (custom) data
     }
-}
-export interface AppEditorActivityEvent extends AppEditorActivityHeartbeat {
-    duration: number;
 }
 
 export interface Bucket {
@@ -35,10 +30,10 @@ export interface Bucket {
 }
 
 interface HeartbeatQueueItem {
-    onSuccess: (heartbeat: Heartbeat) => void;
+    onSuccess: (heartbeat: Event) => void;
     onError: (err: AxiosError) => void;
     pulsetime: number;
-    heartbeat: Heartbeat;
+    heartbeat: Event;
 }
 
 export class AWClient {
@@ -64,7 +59,6 @@ export class AWClient {
           this.baseURL = options.baseURL;
         }
 
-
         this.req = axios.create({
             baseURL: this.baseURL + '/api',
             timeout: 10000,
@@ -80,18 +74,18 @@ export class AWClient {
     }
 
     ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
-      return this.req.post('/0/buckets/' + bucketId, {
-          client: this.clientname,
-          type,
-          hostname,
-      }).then(() => ({alreadyExist: false})).catch(err => {
-        // Will return 304 if bucket already exists
-        if (err && err.response && err.response.status == 304) {
-          return {alreadyExist: true};
-        }
-        throw err
-      });
-  }
+        return this.req.post('/0/buckets/' + bucketId, {
+            client: this.clientname,
+            type,
+            hostname,
+        }).then(() => ({alreadyExist: false})).catch(err => {
+            // Will return 304 if bucket already exists
+            if (err && err.response && err.response.status == 304) {
+                return {alreadyExist: true};
+            }
+            throw err
+        });
+    }
 
     createBucket(bucketId: string, type: string, hostname: string) {
         return this.req.post('/0/buckets/' + bucketId, {
@@ -170,7 +164,7 @@ export class AWClient {
      * @param pulsetime The maximum amount of time in seconds since the last heartbeat to be merged with the previous heartbeat in aw-server
      * @param heartbeat The actual heartbeat event
      */
-    heartbeat(bucketId: string, pulsetime: number, heartbeat: Heartbeat): Promise<Heartbeat> {
+    heartbeat(bucketId: string, pulsetime: number, heartbeat: Event): Promise<Event> {
         // Create heartbeat queue for bucket if not already existing
         if (!this.heartbeatQueues.hasOwnProperty(bucketId)) {
             this.heartbeatQueues[bucketId] = {
@@ -192,13 +186,13 @@ export class AWClient {
         });
     }
 
-    private send_heartbeat(bucketId: string, pulsetime: number, data: Heartbeat): Promise<Heartbeat> {
+    private send_heartbeat(bucketId: string, pulsetime: number, data: Event): Promise<Event> {
         return this.req.post('/0/buckets/' + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)
-        .then(res => res.data)
-        .then(heartbeat => {
-          heartbeat.timestamp = new Date(heartbeat.timestamp)
-          return heartbeat
-        });
+            .then(res => res.data)
+            .then(heartbeat => {
+                heartbeat.timestamp = new Date(heartbeat.timestamp)
+                    return heartbeat
+            });
     }
 
     // Start heartbeat queue processing if not currently processing
