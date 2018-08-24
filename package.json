@@ -18,7 +18,7 @@
   },
   "scripts": {
     "compile": "tsc",
-    "test": "./test.sh",
+    "test": "npm run prepare; ./test.sh",
     "prepare": "npm run compile"
   },
   "repository": {
@@ -26,7 +26,7 @@
     "url": "git+https://github.com/ActivityWatch/aw-client-js.git"
   },
   "author": "Johan Bjäreholt <johan@bjareho.lt>",
-  "license": "UNLICENSED",
+  "license": "MPL-2.0",
   "bugs": {
     "url": "https://github.com/ActivityWatch/aw-client-js/issues"
   },
