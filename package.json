@@ -19,7 +19,7 @@
   "scripts": {
     "compile": "tsc",
     "test": "./test.sh",
-    "prepare": "npm run compile && npm run test"
+    "prepare": "npm run compile"
   },
   "repository": {
     "type": "git",

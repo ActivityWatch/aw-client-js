@@ -14,7 +14,7 @@ before_install:
  - "pip install git+https://github.com/ActivityWatch/aw-server.git"
 
 install:
- - "npm install"
+ - "make build"
 
 script:
- - "./test.sh"
+ - "make test"
