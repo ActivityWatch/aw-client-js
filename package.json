@@ -2,6 +2,21 @@
   "name": "aw-client",
   "version": "0.1.0",
   "description": "An ActivityWatch client library for JavaScript/NodeJS",
+  "author": "Johan Bjäreholt <johan@bjareho.lt>",
+  "license": "MPL-2.0",
+  "homepage": "https://github.com/ActivityWatch/aw-client-js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ActivityWatch/aw-client-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ActivityWatch/aw-client-js/issues"
+  },
+  "scripts": {
+    "compile": "tsc",
+    "test": "npm run prepare; ./test.sh",
+    "prepare": "npm run compile"
+  },
   "main": "out/aw-client.js",
   "files": [
     "out"
@@ -15,20 +30,5 @@
     "mocha": "^5.2.0",
     "tslint": "^5.8.0",
     "typescript": "^2.9.2"
-  },
-  "scripts": {
-    "compile": "tsc",
-    "test": "npm run prepare; ./test.sh",
-    "prepare": "npm run compile"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ActivityWatch/aw-client-js.git"
-  },
-  "author": "Johan Bjäreholt <johan@bjareho.lt>",
-  "license": "MPL-2.0",
-  "bugs": {
-    "url": "https://github.com/ActivityWatch/aw-client-js/issues"
-  },
-  "homepage": "http://activitywatch.github.io/"
+  }
 }
