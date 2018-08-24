@@ -14,7 +14,7 @@
   },
   "scripts": {
     "compile": "tsc",
-    "test": "npm run prepare; ./test.sh",
+    "test": "npm run prepare && ./test.sh",
     "prepare": "npm run compile"
   },
   "main": "out/aw-client.js",
