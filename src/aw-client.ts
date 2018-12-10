@@ -1,8 +1,7 @@
-import axios from 'axios';
-import { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosError, AxiosInstance } from "axios";
 
 // Default interface for events
-export interface Event {
+export interface IEvent {
     id?: number;
     timestamp: Date;
     duration?: number;    // duration in seconds
@@ -10,30 +9,36 @@ export interface Event {
 }
 
 // Interfaces for coding activity
-export interface AppEditorEvent extends Event {
+export interface IAppEditorEvent extends IEvent {
     data: {
         project: string;    // Path to the current project / workDir
         file: string;       // Path to the current file
         language: string;   // Coding Language identifier (e.g. javascript, python, ...)
         [k: string]: any;   // Additional (custom) data
-    }
+    };
 }
 
-export interface Bucket {
-  id: string,
-  name: string,
-  type: string,
-  client: string,
-  hostname: string,
-  created: Date
-  last_update?: Date
+export interface IBucket {
+  id: string;
+  name: string;
+  type: string;
+  client: string;
+  hostname: string;
+  created: Date;
+  last_update?: Date;
 }
 
-interface HeartbeatQueueItem {
-    onSuccess: (heartbeat: Event) => void;
+interface IHeartbeatQueueItem {
+    onSuccess: (heartbeat: IEvent) => void;
     onError: (err: AxiosError) => void;
     pulsetime: number;
-    heartbeat: Event;
+    heartbeat: IEvent;
+}
+
+interface IInfo {
+  hostname: string;
+  version: string;
+  testing: boolean;
 }
 
 export class AWClient {
@@ -43,96 +48,92 @@ export class AWClient {
     public req: AxiosInstance;
 
     private heartbeatQueues: {
-        [bucket_id: string]: {
+        [bucketId: string]: {
             isProcessing: boolean;
-            data: Array<HeartbeatQueueItem>
-        }
+            data: IHeartbeatQueueItem[];
+        },
     } = {};
 
     constructor(clientname: string, options: {testing?: boolean, baseURL?: string} = {}) {
         this.clientname = clientname;
         this.testing = options.testing || false;
-        if (typeof options.baseURL === 'undefined') {
+        if (typeof options.baseURL === "undefined") {
             const port = !options.testing ? 5600 : 5666;
-            this.baseURL = 'http://127.0.0.1:' + port;
+            this.baseURL = "http://127.0.0.1:" + port;
         } else {
           this.baseURL = options.baseURL;
         }
 
         this.req = axios.create({
-            baseURL: this.baseURL + '/api',
+            baseURL: this.baseURL + "/api",
             timeout: 10000,
         });
     }
 
-    getInfo(): Promise<{
-      hostname: string,
-      version: string,
-      testing: boolean
-    }> {
-        return this.req.get('/0/info').then(res => res.data);
+    public async getInfo(): Promise<IInfo> {
+        return this.req.get("/0/info").then(res => res.data);
     }
 
-    ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
-        return this.req.post('/0/buckets/' + bucketId, {
+    public async ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
+        return this.req.post("/0/buckets/" + bucketId, {
             client: this.clientname,
             type,
             hostname,
         }).then(() => ({alreadyExist: false})).catch(err => {
             // Will return 304 if bucket already exists
-            if (err && err.response && err.response.status == 304) {
+            if (err && err.response && err.response.status === 304) {
                 return {alreadyExist: true};
             }
-            throw err
+            throw err;
         });
     }
 
-    createBucket(bucketId: string, type: string, hostname: string) {
-        return this.req.post('/0/buckets/' + bucketId, {
+    public async createBucket(bucketId: string, type: string, hostname: string): Promise<undefined> {
+        return this.req.post("/0/buckets/" + bucketId, {
             client: this.clientname,
             type,
             hostname,
         }).then(() => undefined);
     }
 
-    deleteBucket(bucketId: string) {
-        return this.req.delete('/0/buckets/' + bucketId + "?force=1").then(() => undefined);
+    public async deleteBucket(bucketId: string) {
+        return this.req.delete("/0/buckets/" + bucketId + "?force=1").then(() => undefined);
     }
 
-    getBuckets(): Promise<{[bucketId: string]: Bucket}> {
+    public async getBuckets(): Promise<{[bucketId: string]: IBucket}> {
         return this.req.get("/0/buckets/")
         .then(res => res.data)
         .then(buckets => {
           Object.keys(buckets).forEach(bucket => {
-            buckets[bucket].created = new Date(buckets[bucket].created)
+            buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
-              buckets[bucket].last_updated = new Date(buckets[bucket].last_updated)
+              buckets[bucket].last_updated = new Date(buckets[bucket].last_updated);
             }
-          })
-          return buckets
+          });
+          return buckets;
         });
     }
 
-    getBucketInfo(bucketId: string): Promise<Bucket> {
+    public async getBucketInfo(bucketId: string): Promise<IBucket> {
         return this.req.get("/0/buckets/" + bucketId)
         .then(res => res.data)
         .then(bucket => {
-          bucket.created = new Date(bucket.created)
-          return bucket
+          bucket.created = new Date(bucket.created);
+          return bucket;
         });
     }
 
-    getEvents(bucketId: string, params: { [k: string]: any }): Promise<Array<Event>> {
+    public getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
         return this.req.get("/0/buckets/" + bucketId + "/events", { params }).then(res => res.data)
         .then(events => {
-          events.forEach((event: Event) => {
-            event.timestamp = new Date(event.timestamp)
-          })
-          return events
+          events.forEach((event: IEvent) => {
+            event.timestamp = new Date(event.timestamp);
+          });
+          return events;
         });
     }
 
-    countEvents(bucketId: string, startTime?: Date, endTime?: Date) {
+    public countEvents(bucketId: string, startTime?: Date, endTime?: Date) {
         const params = {
             starttime: startTime ? startTime.toISOString() : null,
             endtime: endTime ? endTime.toISOString() : null,
@@ -140,36 +141,37 @@ export class AWClient {
         return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
     }
 
-    insertEvent(bucketId: string, event: Event) {
+    public insertEvent(bucketId: string, event: IEvent) {
         return this.insertEvents(bucketId, [event]).then(events => events[0]);
     }
 
-    insertEvents(bucketId: string, events: Array<Event>): Promise<Array<Event>> {
-        return this.req.post('/0/buckets/' + bucketId + "/events", events)
+    public insertEvents(bucketId: string, events: IEvent[]): Promise<IEvent[]> {
+        return this.req.post("/0/buckets/" + bucketId + "/events", events)
         .then(res => res.data)
-        .then(events => {
-          if (!Array.isArray(events)) {
-            events = [events]
+        .then(insertedEvents => {
+          if (!Array.isArray(insertedEvents)) {
+            insertedEvents = [insertedEvents];
           }
-          events.forEach((event: Event) => {
-            event.timestamp = new Date(event.timestamp)
-          })
-          return events
+          insertedEvents.forEach((event: IEvent) => {
+            event.timestamp = new Date(event.timestamp);
+          });
+          return insertedEvents;
         });
     }
 
     /**
      *
      * @param bucketId The id of the bucket to send the heartbeat to
-     * @param pulsetime The maximum amount of time in seconds since the last heartbeat to be merged with the previous heartbeat in aw-server
+     * @param pulsetime The maximum amount of time in seconds since the last heartbeat to be merged
+     *                  with the previous heartbeat in aw-server
      * @param heartbeat The actual heartbeat event
      */
-    heartbeat(bucketId: string, pulsetime: number, heartbeat: Event): Promise<Event> {
+    public heartbeat(bucketId: string, pulsetime: number, heartbeat: IEvent): Promise<IEvent> {
         // Create heartbeat queue for bucket if not already existing
         if (!this.heartbeatQueues.hasOwnProperty(bucketId)) {
             this.heartbeatQueues[bucketId] = {
                 isProcessing: false,
-                data: []
+                data: [],
             };
         }
 
@@ -179,19 +181,29 @@ export class AWClient {
                 onSuccess: resolve,
                 onError: reject,
                 pulsetime,
-                heartbeat
+                heartbeat,
             });
 
             this.updateHeartbeatQueue(bucketId);
         });
     }
 
-    private send_heartbeat(bucketId: string, pulsetime: number, data: Event): Promise<Event> {
-        return this.req.post('/0/buckets/' + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)
+    public async query(timeperiods: Array<string|{start: Date, end: Date}>, query: string[]): Promise<any> {
+        const data = {
+            query,
+            timeperiods: timeperiods.map(tp => {
+                return typeof tp !== "string" ? `${tp.start.toISOString()}/${tp.end.toISOString()}` : tp;
+            }),
+        };
+        return (await this.req.post("/0/query/", data)).data;
+    }
+
+    private async send_heartbeat(bucketId: string, pulsetime: number, data: IEvent): Promise<IEvent> {
+        return this.req.post("/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)
             .then(res => res.data)
             .then(heartbeat => {
-                heartbeat.timestamp = new Date(heartbeat.timestamp)
-                    return heartbeat
+                heartbeat.timestamp = new Date(heartbeat.timestamp);
+                return heartbeat;
             });
     }
 
@@ -200,7 +212,7 @@ export class AWClient {
         const queue = this.heartbeatQueues[bucketId];
 
         if (!queue.isProcessing && queue.data.length) {
-            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as HeartbeatQueueItem;
+            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as IHeartbeatQueueItem;
 
             queue.isProcessing = true;
             this.send_heartbeat(bucketId, pulsetime, heartbeat)
@@ -215,13 +227,5 @@ export class AWClient {
                     this.updateHeartbeatQueue(bucketId);
                 });
         }
-    }
-
-    async query(timeperiods: Array<string|{start: Date, end: Date}>, query: Array<string>): Promise<any> {
-        const data = {
-            query,
-            timeperiods: timeperiods.map(tp => (typeof tp !== "string" ? `${tp.start.toISOString()}/${tp.end.toISOString()}` : tp))
-        };
-        return (await this.req.post('/0/query/', data)).data;
     }
 }
