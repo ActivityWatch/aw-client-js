@@ -123,7 +123,7 @@ export class AWClient {
         });
     }
 
-    public getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
+    public async getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
         return this.req.get("/0/buckets/" + bucketId + "/events", { params }).then(res => res.data)
         .then(events => {
           events.forEach((event: IEvent) => {
@@ -141,7 +141,7 @@ export class AWClient {
         return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
     }
 
-    public insertEvent(bucketId: string, event: IEvent) {
+    public insertEvent(bucketId: string, event: IEvent): Promise<IEvent> {
         return this.insertEvents(bucketId, [event]).then(events => events[0]);
     }
 
@@ -157,6 +157,18 @@ export class AWClient {
           });
           return insertedEvents;
         });
+    }
+
+    // Just an alias for insertEvent requiring the event to have an ID assigned
+    public async replaceEvent(bucketId: string, event: IEvent): Promise<IEvent> {
+        if(event.id === undefined) {
+            throw("Can't replace event without ID assigned")
+        }
+        return this.insertEvent(bucketId, event);
+    }
+
+    public async deleteEvent(bucketId: string, eventId: number) {
+        return this.req.delete('/0/buckets/' + bucketId + '/events/' + eventId);
     }
 
     /**
