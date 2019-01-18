@@ -59,7 +59,7 @@ export class AWClient {
         this.testing = options.testing || false;
         if (typeof options.baseURL === "undefined") {
             const port = !options.testing ? 5600 : 5666;
-            this.baseURL = "http://127.0.0.1:" + port;
+            this.baseURL = `http://127.0.0.1:${port}`;
         } else {
           this.baseURL = options.baseURL;
         }
@@ -75,65 +75,62 @@ export class AWClient {
     }
 
     public async ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
-        return this.req.post("/0/buckets/" + bucketId, {
-            client: this.clientname,
-            type,
-            hostname,
-        }).then(() => ({alreadyExist: false})).catch(err => {
+        try {
+            await this.req.post(`/0/buckets/${bucketId}`, {
+                client: this.clientname,
+                type,
+                hostname,
+            })
+        } catch(err) {
             // Will return 304 if bucket already exists
             if (err && err.response && err.response.status === 304) {
                 return {alreadyExist: true};
             }
             throw err;
-        });
+        }
+        return {alreadyExist: false}
     }
 
     public async createBucket(bucketId: string, type: string, hostname: string): Promise<undefined> {
-        return this.req.post("/0/buckets/" + bucketId, {
+        await this.req.post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
             type,
             hostname,
-        }).then(() => undefined);
+        })
+        return undefined;
     }
 
-    public async deleteBucket(bucketId: string) {
-        return this.req.delete("/0/buckets/" + bucketId + "?force=1").then(() => undefined);
+    public async deleteBucket(bucketId: string): Promise<undefined> {
+        await this.req.delete(`/0/buckets/${bucketId}?force=1`);
+        return undefined;
     }
 
     public async getBuckets(): Promise<{[bucketId: string]: IBucket}> {
-        return this.req.get("/0/buckets/")
-        .then(res => res.data)
-        .then(buckets => {
-          Object.keys(buckets).forEach(bucket => {
+        let buckets = (await this.req.get("/0/buckets/")).data;
+        Object.keys(buckets).forEach(bucket => {
             buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
-              buckets[bucket].last_updated = new Date(buckets[bucket].last_updated);
+                buckets[bucket].last_updated = new Date(buckets[bucket].last_updated);
             }
-          });
-          return buckets;
         });
+        return buckets;
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        return this.req.get("/0/buckets/" + bucketId)
-        .then(res => res.data)
-        .then(bucket => {
-          bucket.created = new Date(bucket.created);
-          return bucket;
-        });
+        let bucket = (await this.req.get(`/0/buckets/${bucketId}`)).data;
+        bucket.created = new Date(bucket.created);
+        return bucket;
     }
 
-    public getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
-        return this.req.get("/0/buckets/" + bucketId + "/events", { params }).then(res => res.data)
-        .then(events => {
-          events.forEach((event: IEvent) => {
+    public async getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
+        let events = (await this.req.get("/0/buckets/" + bucketId + "/events", { params })).data;
+        events.forEach((event: IEvent) => {
             event.timestamp = new Date(event.timestamp);
-          });
-          return events;
         });
+        return events;
     }
 
-    public countEvents(bucketId: string, startTime?: Date, endTime?: Date) {
+    public async countEvents(bucketId: string, startTime?: Date, endTime?: Date) {
         const params = {
             starttime: startTime ? startTime.toISOString() : null,
             endtime: endTime ? endTime.toISOString() : null,
@@ -141,22 +138,32 @@ export class AWClient {
         return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
     }
 
-    public insertEvent(bucketId: string, event: IEvent) {
+    public async insertEvent(bucketId: string, event: IEvent): Promise<IEvent> {
         return this.insertEvents(bucketId, [event]).then(events => events[0]);
     }
 
-    public insertEvents(bucketId: string, events: IEvent[]): Promise<IEvent[]> {
-        return this.req.post("/0/buckets/" + bucketId + "/events", events)
-        .then(res => res.data)
-        .then(insertedEvents => {
-          if (!Array.isArray(insertedEvents)) {
+    public async insertEvents(bucketId: string, events: IEvent[]): Promise<IEvent[]> {
+        let insertedEvents = (await this.req.post("/0/buckets/" + bucketId + "/events", events)).data;
+        if (!Array.isArray(insertedEvents)) {
             insertedEvents = [insertedEvents];
-          }
-          insertedEvents.forEach((event: IEvent) => {
+        }
+        insertedEvents.forEach((event: IEvent) => {
             event.timestamp = new Date(event.timestamp);
-          });
-          return insertedEvents;
         });
+        return insertedEvents;
+    }
+
+    // Just an alias for insertEvent requiring the event to have an ID assigned
+    public async replaceEvent(bucketId: string, event: IEvent): Promise<IEvent> {
+        if(event.id === undefined) {
+            throw("Can't replace event without ID assigned")
+        }
+        return this.insertEvent(bucketId, event);
+    }
+
+    public async deleteEvent(bucketId: string, eventId: number): Promise<undefined> {
+        await this.req.delete('/0/buckets/' + bucketId + '/events/' + eventId);
+        return undefined;
     }
 
     /**
@@ -199,12 +206,9 @@ export class AWClient {
     }
 
     private async send_heartbeat(bucketId: string, pulsetime: number, data: IEvent): Promise<IEvent> {
-        return this.req.post("/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)
-            .then(res => res.data)
-            .then(heartbeat => {
-                heartbeat.timestamp = new Date(heartbeat.timestamp);
-                return heartbeat;
-            });
+        let heartbeat = (await this.req.post("/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)).data;
+        heartbeat.timestamp = new Date(heartbeat.timestamp);
+        return heartbeat;
     }
 
     // Start heartbeat queue processing if not currently processing
