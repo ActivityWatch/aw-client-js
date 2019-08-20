@@ -138,23 +138,16 @@ export class AWClient {
         return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
     }
 
-    public async insertEvent(bucketId: string, event: IEvent): Promise<IEvent> {
-        return this.insertEvents(bucketId, [event]).then(events => events[0]);
+    public async insertEvent(bucketId: string, event: IEvent): Promise<void> {
+        return this.insertEvents(bucketId, [event]);
     }
 
-    public async insertEvents(bucketId: string, events: IEvent[]): Promise<IEvent[]> {
-        let insertedEvents = (await this.req.post("/0/buckets/" + bucketId + "/events", events)).data;
-        if (!Array.isArray(insertedEvents)) {
-            insertedEvents = [insertedEvents];
-        }
-        insertedEvents.forEach((event: IEvent) => {
-            event.timestamp = new Date(event.timestamp);
-        });
-        return insertedEvents;
+    public async insertEvents(bucketId: string, events: IEvent[]): Promise<void> {
+        await this.req.post("/0/buckets/" + bucketId + "/events", events);
     }
 
     // Just an alias for insertEvent requiring the event to have an ID assigned
-    public async replaceEvent(bucketId: string, event: IEvent): Promise<IEvent> {
+    public async replaceEvent(bucketId: string, event: IEvent): Promise<void> {
         if(event.id === undefined) {
             throw("Can't replace event without ID assigned")
         }
