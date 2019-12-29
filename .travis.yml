@@ -1,17 +1,14 @@
 language: node_js
+dist: bionic
 node_js:
- - "6"
  - "8"
  - "node"
 
-env: PYENV_VERSION='3.5.4'
-
 before_install:
- - "wget https://github.com/praekeltfoundation/travis-pyenv/releases/download/0.4.0/setup-pyenv.sh"
- - "source setup-pyenv.sh"
+ - "pyenv global 3.7"
  - "python3 -V"
- - "pip install git+https://github.com/ActivityWatch/aw-core.git"
- - "pip install git+https://github.com/ActivityWatch/aw-server.git"
+ - "pip3 install git+https://github.com/ActivityWatch/aw-core.git"
+ - "pip3 install git+https://github.com/ActivityWatch/aw-server.git"
 
 install:
  - "make build"
