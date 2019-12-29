@@ -29,7 +29,7 @@ export interface IBucket {
 }
 
 interface IHeartbeatQueueItem {
-    onSuccess: (heartbeat: IEvent) => void;
+    onSuccess: () => void;
     onError: (err: AxiosError) => void;
     pulsetime: number;
     heartbeat: IEvent;
@@ -173,7 +173,7 @@ export class AWClient {
      *                  with the previous heartbeat in aw-server
      * @param heartbeat The actual heartbeat event
      */
-    public heartbeat(bucketId: string, pulsetime: number, heartbeat: IEvent): Promise<IEvent> {
+    public heartbeat(bucketId: string, pulsetime: number, heartbeat: IEvent): Promise<undefined> {
         // Create heartbeat queue for bucket if not already existing
         if (!this.heartbeatQueues.hasOwnProperty(bucketId)) {
             this.heartbeatQueues[bucketId] = {
@@ -221,7 +221,7 @@ export class AWClient {
             queue.isProcessing = true;
             this.send_heartbeat(bucketId, pulsetime, heartbeat)
                 .then((response) => {
-                    onSuccess(response);
+                    onSuccess();
                     queue.isProcessing = false;
                     this.updateHeartbeatQueue(bucketId);
                 })
