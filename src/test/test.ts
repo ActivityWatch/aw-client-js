@@ -96,7 +96,6 @@ describe("All", () => {
         }))
         .then(([ firstResponse ]) => {
             console.log("heartbeat", firstResponse);
-            assert.equal(testevent.data.label, firstResponse.data.label);
         });
     });
 
