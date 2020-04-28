@@ -59,7 +59,7 @@ export class AWClient {
         this.testing = options.testing || false;
         if (typeof options.baseURL === "undefined") {
             const port = !options.testing ? 5600 : 5666;
-            this.baseURL = `http://127.0.0.1:${port}`;
+            this.baseURL = `http://localhost:${port}`;
         } else {
           this.baseURL = options.baseURL;
         }
