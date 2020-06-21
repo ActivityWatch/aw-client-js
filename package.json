@@ -22,13 +22,13 @@
     "out"
   ],
   "dependencies": {
-    "axios": "^0.19.0"
+    "axios": "^0.19.2"
   },
   "devDependencies": {
     "@types/mocha": "^2.2.42",
-    "@types/node": "^7.0.43",
-    "mocha": "^5.2.0",
-    "tslint": "^5.11.0",
+    "@types/node": "^7.10.11",
+    "mocha": "^8.0.1",
+    "tslint": "^5.20.1",
     "typescript": "^2.9.2"
   }
 }
