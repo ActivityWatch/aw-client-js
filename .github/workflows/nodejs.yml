@@ -1,0 +1,40 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [12.x]
+        aw-version: [0.9.2]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Build
+      run: make build
+    - name: lint
+      run: make lint
+    - name: Download aw-server
+      run: wget https://github.com/ActivityWatch/activitywatch/releases/download/v${{ matrix.aw-version }}/activitywatch-v${{ matrix.aw-version }}-linux-x86_64.zip
+    - name: Unzip activitywatch
+      run: unzip activitywatch-v${{ matrix.aw-version }}-linux-x86_64.zip
+    - name: Run tests
+      run: |
+        export PATH=./activitywatch/aw-server:$PATH
+        make test
