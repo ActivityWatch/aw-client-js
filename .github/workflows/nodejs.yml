@@ -20,12 +20,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-      with:
-        submodules: 'recursive'
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
+    - name: Cache activitywatch binaries
+      uses: actions/cache@v2
+      with:
+        path: ./activitywatch
+        key: ${{ runner.os }}-activitywatch-${{ matrix.aw-version }}
     - name: Build
       run: make build
     - name: lint
