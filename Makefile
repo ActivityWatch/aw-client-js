@@ -1,3 +1,5 @@
+.PHONY: build install test lint
+
 build: install
 	npm run compile
 

@@ -80,15 +80,15 @@ export class AWClient {
                 client: this.clientname,
                 type,
                 hostname,
-            })
-        } catch(err) {
+            });
+        } catch (err) {
             // Will return 304 if bucket already exists
             if (err && err.response && err.response.status === 304) {
                 return {alreadyExist: true};
             }
             throw err;
         }
-        return {alreadyExist: false}
+        return {alreadyExist: false};
     }
 
     public async createBucket(bucketId: string, type: string, hostname: string): Promise<undefined> {
@@ -96,7 +96,7 @@ export class AWClient {
             client: this.clientname,
             type,
             hostname,
-        })
+        });
         return undefined;
     }
 
@@ -106,7 +106,7 @@ export class AWClient {
     }
 
     public async getBuckets(): Promise<{[bucketId: string]: IBucket}> {
-        let buckets = (await this.req.get("/0/buckets/")).data;
+        const buckets = (await this.req.get("/0/buckets/")).data;
         Object.keys(buckets).forEach(bucket => {
             buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
@@ -117,13 +117,13 @@ export class AWClient {
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        let bucket = (await this.req.get(`/0/buckets/${bucketId}`)).data;
+        const bucket = (await this.req.get(`/0/buckets/${bucketId}`)).data;
         bucket.created = new Date(bucket.created);
         return bucket;
     }
 
     public async getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
-        let events = (await this.req.get("/0/buckets/" + bucketId + "/events", { params })).data;
+        const events = (await this.req.get("/0/buckets/" + bucketId + "/events", { params })).data;
         events.forEach((event: IEvent) => {
             event.timestamp = new Date(event.timestamp);
         });
@@ -155,14 +155,14 @@ export class AWClient {
 
     // Just an alias for insertEvent requiring the event to have an ID assigned
     public async replaceEvent(bucketId: string, event: IEvent): Promise<IEvent> {
-        if(event.id === undefined) {
-            throw("Can't replace event without ID assigned")
+        if (event.id === undefined) {
+            throw(Error("Can't replace event without ID assigned"));
         }
         return this.insertEvent(bucketId, event);
     }
 
     public async deleteEvent(bucketId: string, eventId: number): Promise<undefined> {
-        await this.req.delete('/0/buckets/' + bucketId + '/events/' + eventId);
+        await this.req.delete("/0/buckets/" + bucketId + "/events/" + eventId);
         return undefined;
     }
 
@@ -206,7 +206,8 @@ export class AWClient {
     }
 
     private async send_heartbeat(bucketId: string, pulsetime: number, data: IEvent): Promise<IEvent> {
-        let heartbeat = (await this.req.post("/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime, data)).data;
+        const url = "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
+        const heartbeat = (await this.req.post(url, data)).data;
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
     }
