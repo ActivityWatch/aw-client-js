@@ -34,9 +34,9 @@ jobs:
     - name: lint
       run: make lint
     - name: Download aw-server
-      run: wget https://github.com/ActivityWatch/activitywatch/releases/download/v${{ matrix.aw-version }}/activitywatch-v${{ matrix.aw-version }}-linux-x86_64.zip
-    - name: Unzip activitywatch
-      run: unzip activitywatch-v${{ matrix.aw-version }}-linux-x86_64.zip
+      run: wget -nc https://github.com/ActivityWatch/activitywatch/releases/download/v${{ matrix.aw-version }}/activitywatch-v${{ matrix.aw-version }}-linux-x86_64.zip
+    - name: Unzip aw-server
+      run: unzip -o activitywatch-v${{ matrix.aw-version }}-linux-x86_64.zip
     - name: Run tests
       run: |
         export PATH=./activitywatch/aw-server:$PATH

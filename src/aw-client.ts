@@ -205,6 +205,13 @@ export class AWClient {
         return (await this.req.post("/0/query/", data)).data;
     }
 
+    public async import(importFile: File): Promise<any> {
+        const formData = new FormData();
+        formData.append("buckets.json", importFile);
+        const headers = { "Content-Type" : "multipart/form-data" };
+        return this.req.post("/0/import", formData, { headers });
+    }
+
     private async send_heartbeat(bucketId: string, pulsetime: number, data: IEvent): Promise<IEvent> {
         const url = "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
         const heartbeat = (await this.req.post(url, data)).data;
