@@ -29,7 +29,7 @@ export interface IBucket {
 }
 
 interface IHeartbeatQueueItem {
-    onSuccess: () => void;
+    onSuccess: (value?: PromiseLike<undefined> | undefined) => void;
     onError: (err: AxiosError) => void;
     pulsetime: number;
     heartbeat: IEvent;
