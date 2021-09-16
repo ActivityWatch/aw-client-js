@@ -3,6 +3,7 @@
 Client library for [ActivityWatch](http://activitywatch.net) in TypeScript/JavaScript.
 
 [![Build Status](https://github.com/ActivityWatch/aw-client-js/workflows/Build/badge.svg)](https://github.com/ActivityWatch/aw-client-js/actions)
+[![npm](https://img.shields.io/npm/v/aw-client)](https://www.npmjs.com/package/aw-client)
 [![Known Vulnerabilities](https://snyk.io/test/github/ActivityWatch/aw-client-js/badge.svg)](https://snyk.io/test/github/ActivityWatch/aw-client-js)
 
 ## Install
