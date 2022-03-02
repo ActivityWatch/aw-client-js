@@ -20,12 +20,12 @@ const testevent: IEvent = {
     },
 };
 
-describe("All", () => {
+describe("aw-client interface", () => {
     before("Delete test bucket", () => {
         // Delete bucket if it exists
         return awc.deleteBucket(bucketId)
             .catch((err) => {
-              if (err && err.response.status === 404) {
+              if (err && err.response && err.response.status === 404) {
                 return "ok";
               }
               throw err;
@@ -50,9 +50,16 @@ describe("All", () => {
             return awc.getEvents(bucketId, { limit: 1 });
         })
         .then((resp) => {
-            console.log("getEvents", resp);
-            assert.equal(testevent.timestamp.toISOString(), resp[0].timestamp.toISOString());
-            assert.equal(testevent.data.label, resp[0].data.label);
+            console.log("result from getEvents", resp);
+            assert.equal(resp.length, 1);
+            const event: IEvent = resp[0];
+            console.log("getEvent", event);
+            return awc.getEvent(bucketId, event.id!);
+        })
+        .then((resp) => {
+            console.log("result from getEvent", resp);
+            assert.equal(testevent.timestamp.toISOString(), resp.timestamp.toISOString());
+            assert.equal(testevent.data.label, resp.data.label);
         });
     });
 
