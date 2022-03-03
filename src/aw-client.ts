@@ -85,7 +85,7 @@ export class AWClient {
             });
         } catch (err) {
             // Will return 304 if bucket already exists
-            if (err && err.response && err.response.status === 304) {
+            if (axios.isAxiosError(err) && err.response && err.response.status === 304) {
                 return {alreadyExist: true};
             }
             throw err;
