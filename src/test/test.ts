@@ -44,6 +44,7 @@ describe("aw-client interface", () => {
         });
     });
 
+    // NOTE: This test will fail in CI until v0.12 is released (with support for 'get event by ID')
     it("Post event, get event and assert", () => {
         return awc.insertEvent(bucketId, testevent).then((resp) => {
             console.log("insertEvent", resp);
