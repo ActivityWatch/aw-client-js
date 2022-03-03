@@ -107,19 +107,26 @@ describe("aw-client interface", () => {
     });
 
     it("Query", async () => {
-        await awc.heartbeat(bucketId, 5, testevent);
+        let e1 = {...testevent, timestamp: new Date("2022-01-01")}
+        let e2 = {...testevent, timestamp: new Date("2022-01-02")}
+        await awc.heartbeat(bucketId, 5, e1);
+        await awc.heartbeat(bucketId, 5, e2);
+
         // Both these are valid timeperiod specs
         const timeperiods = [
-            {start: testevent.timestamp, end: testevent.timestamp},
-            `${testevent.timestamp.toISOString()}/${testevent.timestamp.toISOString()}`,
+            {start: e1.timestamp, end: e2.timestamp},
+            `${e1.timestamp.toISOString()}/${e2.timestamp.toISOString()}`,
         ];
         const query = [
             `bucket="${bucketId}";`,
             "RETURN=query_bucket(bucket);",
         ];
+        console.log(timeperiods);
         const resp = await awc.query(timeperiods, query);
         console.log("query", resp);
-        assert.equal(testevent.timestamp.toISOString(), new Date(resp[0][0].timestamp).toISOString());
-        assert.equal(testevent.data.label, resp[0][0].data.label);
+        assert.equal(e1.timestamp.toISOString(), new Date(resp[0][1].timestamp).toISOString());
+        assert.equal(e1.data.label, resp[0][1].data.label);
+        assert.equal(e2.timestamp.toISOString(), new Date(resp[0][0].timestamp).toISOString());
+        assert.equal(e2.data.label, resp[0][0].data.label);
     });
 });
