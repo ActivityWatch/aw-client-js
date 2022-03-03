@@ -59,7 +59,8 @@ export class AWClient {
         this.testing = options.testing || false;
         if (typeof options.baseURL === "undefined") {
             const port = !options.testing ? 5600 : 5666;
-            // Note: had to switch to 127.0.0.1 over localhost as otherwise there's a possibility it tries to connect to IPv6's `::1`, which will be refused.
+            // Note: had to switch to 127.0.0.1 over localhost as otherwise there's
+            // a possibility it tries to connect to IPv6's `::1`, which will be refused.
             this.baseURL = `http://127.0.0.1:${port}`;
         } else {
           this.baseURL = options.baseURL;
@@ -84,7 +85,6 @@ export class AWClient {
             });
         } catch (err) {
             // Will return 304 if bucket already exists
-            console.log(err)
             if (err && err.response && err.response.status === 304) {
                 return {alreadyExist: true};
             }

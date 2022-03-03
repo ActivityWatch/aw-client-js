@@ -107,8 +107,8 @@ describe("aw-client interface", () => {
     });
 
     it("Query", async () => {
-        let e1 = {...testevent, timestamp: new Date("2022-01-01")}
-        let e2 = {...testevent, timestamp: new Date("2022-01-02")}
+        const e1 = {...testevent, timestamp: new Date("2022-01-01")};
+        const e2 = {...testevent, timestamp: new Date("2022-01-02")};
         await awc.heartbeat(bucketId, 5, e1);
         await awc.heartbeat(bucketId, 5, e2);
 
