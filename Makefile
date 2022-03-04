@@ -1,9 +1,9 @@
 .PHONY: build install test lint
 
-build: install
+build:
 	npm run compile
 
-install:
+install: package-lock.json
 	npm install
 
 test:

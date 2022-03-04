@@ -5,12 +5,7 @@ import { AWClient, IEvent } from "../aw-client";
 const bucketId = "aw-client-js-test";
 const eventType = "test";
 const hostname = "unknown";
-
-// Create client
 const clientName = "aw-client-js-unittest";
-const awc = new AWClient(clientName, {
-  testing: true,
-});
 
 const testevent: IEvent = {
     timestamp: new Date(),
@@ -20,7 +15,12 @@ const testevent: IEvent = {
     },
 };
 
-describe("aw-client interface", () => {
+describe("Basic API usage", () => {
+    // Create client
+    const awc = new AWClient(clientName, {
+      testing: true,
+    });
+
     before("Delete test bucket", () => {
         // Delete bucket if it exists
         return awc.deleteBucket(bucketId)
@@ -45,49 +45,41 @@ describe("aw-client interface", () => {
     });
 
     // NOTE: This test will fail in CI until v0.12 is released (with support for 'get event by ID')
-    it("Post event, get event and assert", () => {
-        return awc.insertEvent(bucketId, testevent).then((resp) => {
-            console.log("insertEvent", resp);
-            return awc.getEvents(bucketId, { limit: 1 });
-        })
-        .then((resp) => {
-            console.log("result from getEvents", resp);
-            assert.equal(resp.length, 1);
-            const event: IEvent = resp[0];
-            console.log("getEvent", event);
-            return awc.getEvent(bucketId, event.id!);
-        })
-        .then((resp) => {
-            console.log("result from getEvent", resp);
-            assert.equal(testevent.timestamp.toISOString(), resp.timestamp.toISOString());
-            assert.equal(testevent.data.label, resp.data.label);
-        });
+    it("Post event, get event and assert", async () => {
+        const eventInserted = await awc.insertEvent(bucketId, testevent);
+        console.log("insertEvent", eventInserted);
+
+        const events = await awc.getEvents(bucketId, { limit: 1 });
+        console.log("result from getEvents", events);
+
+        assert.equal(events.length, 1);
+        let event: IEvent = events[0];
+        console.log("getEvent", event);
+
+        event = await awc.getEvent(bucketId, event.id!);
+        console.log("result from getEvent", event);
+
+        assert.equal(testevent.timestamp.toISOString(), event.timestamp.toISOString());
+        assert.equal(testevent.data.label, event.data.label);
     });
 
-    it("Create, delete and get buckets", () => {
+    it("Create, delete and get buckets", async () => {
         /* Create -> getBucketInfo and verify -> delete -> getBuckets and verify */
-        return awc.ensureBucket(bucketId, eventType, hostname)
-        .then(() => awc.getBuckets())
-        .then((resp) => {
-            console.log("getBuckets", resp);
-            assert.equal(true, bucketId in resp);
-        })
-        .then(() => {
-            return awc.getBucketInfo(bucketId);
-        })
-        .then((resp) => {
-            console.log("getBucketInfo", resp);
-            assert.equal(resp.created instanceof Date, true);
-            assert.equal(clientName, resp.client);
-            return awc.deleteBucket(bucketId);
-        })
-        .then(() => {
-          return awc.getBuckets();
-        })
-        .then((resp) => {
-            console.log("getBuckets", resp);
-            assert.equal(false, bucketId in resp);
-        });
+        await awc.ensureBucket(bucketId, eventType, hostname);
+        let buckets = await awc.getBuckets();
+
+        console.log("getBuckets", buckets);
+        assert.equal(true, bucketId in buckets);
+        const bucketInfo = await awc.getBucketInfo(bucketId);
+
+        console.log("getBucketInfo", bucketInfo);
+        assert.equal(bucketInfo.created instanceof Date, true);
+        assert.equal(clientName, bucketInfo.client);
+
+        await awc.deleteBucket(bucketId);
+        buckets = await awc.getBuckets();
+        console.log("getBuckets", buckets);
+        assert.equal(false, bucketId in buckets);
     });
 
     it("Heartbeat", () => {
@@ -129,5 +121,18 @@ describe("aw-client interface", () => {
         assert.equal(e1.data.label, resp[0][1].data.label);
         assert.equal(e2.timestamp.toISOString(), new Date(resp[0][0].timestamp).toISOString());
         assert.equal(e2.data.label, resp[0][0].data.label);
+    });
+});
+
+describe("API config behavior", () => {
+    it("can abort requests", () => {
+        const awc = new AWClient(clientName, {
+          testing: true,
+        });
+        let caught = new Promise((resolve, reject) => {
+            awc.getInfo().catch(resolve).then(reject);
+        });
+        awc.abort();
+        return caught;
     });
 });

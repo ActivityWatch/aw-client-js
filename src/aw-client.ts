@@ -18,6 +18,12 @@ export interface IAppEditorEvent extends IEvent {
     };
 }
 
+export interface AWReqOptions {
+    controller?: AbortController,
+    testing?: boolean,
+    baseURL?: string
+}
+
 export interface IBucket {
   id: string;
   name: string;
@@ -47,6 +53,8 @@ export class AWClient {
     public testing: boolean;
     public req: AxiosInstance;
 
+    public controller: AbortController;
+
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -54,7 +62,7 @@ export class AWClient {
         },
     } = {};
 
-    constructor(clientname: string, options: {testing?: boolean, baseURL?: string} = {}) {
+    constructor(clientname: string, options: AWReqOptions = {}) {
         this.clientname = clientname;
         this.testing = options.testing || false;
         if (typeof options.baseURL === "undefined") {
@@ -65,6 +73,7 @@ export class AWClient {
         } else {
           this.baseURL = options.baseURL;
         }
+        this.controller = options.controller || new AbortController();
 
         this.req = axios.create({
             baseURL: this.baseURL + "/api",
@@ -72,13 +81,31 @@ export class AWClient {
         });
     }
 
+    private async _get(endpoint: string, params: object = {}) {
+        return this.req.get(endpoint, {...params, signal: this.controller.signal}).then(res => (res && res.data) || res);
+    }
+
+    private async _post(endpoint: string, data: object = {}) {
+        return this.req.post(endpoint, data, {signal: this.controller.signal}).then(res => (res && res.data) || res);
+    }
+
+    private async _delete(endpoint: string) {
+        return this.req.delete(endpoint, {signal: this.controller.signal});
+    }
+
     public async getInfo(): Promise<IInfo> {
-        return this.req.get("/0/info").then(res => res.data);
+        return this._get("/0/info");
+    }
+
+    public async abort(msg?: string) {
+        console.info(msg || 'Requests cancelled');
+        this.controller.abort();
+        this.controller = new AbortController();
     }
 
     public async ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
         try {
-            await this.req.post(`/0/buckets/${bucketId}`, {
+            await this._post(`/0/buckets/${bucketId}`, {
                 client: this.clientname,
                 type,
                 hostname,
@@ -94,7 +121,7 @@ export class AWClient {
     }
 
     public async createBucket(bucketId: string, type: string, hostname: string): Promise<undefined> {
-        await this.req.post(`/0/buckets/${bucketId}`, {
+        await this._post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
             type,
             hostname,
@@ -103,12 +130,12 @@ export class AWClient {
     }
 
     public async deleteBucket(bucketId: string): Promise<undefined> {
-        await this.req.delete(`/0/buckets/${bucketId}?force=1`);
+        await this._delete(`/0/buckets/${bucketId}?force=1`);
         return undefined;
     }
 
     public async getBuckets(): Promise<{[bucketId: string]: IBucket}> {
-        const buckets = (await this.req.get("/0/buckets/")).data;
+        const buckets = await this._get("/0/buckets/");
         Object.keys(buckets).forEach(bucket => {
             buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
@@ -119,20 +146,20 @@ export class AWClient {
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        const bucket = (await this.req.get(`/0/buckets/${bucketId}`)).data;
+        const bucket = await this._get(`/0/buckets/${bucketId}`);
         bucket.created = new Date(bucket.created);
         return bucket;
     }
 
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
         // Get a single event by ID
-        const event = (await this.req.get("/0/buckets/" + bucketId + "/events/" + eventId)).data;
+        const event = await this._get("/0/buckets/" + bucketId + "/events/" + eventId);
         event.timestamp = new Date(event.timestamp);
         return event;
     }
 
     public async getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
-        const events = (await this.req.get("/0/buckets/" + bucketId + "/events", { params })).data;
+        const events = await this._get("/0/buckets/" + bucketId + "/events", { params });
         events.forEach((event: IEvent) => {
             event.timestamp = new Date(event.timestamp);
         });
@@ -144,7 +171,7 @@ export class AWClient {
             starttime: startTime ? startTime.toISOString() : null,
             endtime: endTime ? endTime.toISOString() : null,
         };
-        return this.req.get("/0/buckets/" + bucketId + "/events/count", { params });
+        return this._get("/0/buckets/" + bucketId + "/events/count", { params });
     }
 
     public async insertEvent(bucketId: string, event: IEvent): Promise<void> {
@@ -152,7 +179,7 @@ export class AWClient {
     }
 
     public async insertEvents(bucketId: string, events: IEvent[]): Promise<void> {
-        await this.req.post("/0/buckets/" + bucketId + "/events", events);
+        await this._post("/0/buckets/" + bucketId + "/events", events);
     }
 
     // Just an alias for insertEvent requiring the event to have an ID assigned
@@ -164,7 +191,7 @@ export class AWClient {
     }
 
     public async deleteEvent(bucketId: string, eventId: number): Promise<void> {
-        await this.req.delete("/0/buckets/" + bucketId + "/events/" + eventId);
+        await this._delete("/0/buckets/" + bucketId + "/events/" + eventId);
     }
 
     /**
@@ -203,12 +230,12 @@ export class AWClient {
                 return typeof tp !== "string" ? `${tp.start.toISOString()}/${tp.end.toISOString()}` : tp;
             }),
         };
-        return (await this.req.post("/0/query/", data)).data;
+        return await this._post("/0/query/", data);
     }
 
     private async send_heartbeat(bucketId: string, pulsetime: number, data: IEvent): Promise<IEvent> {
         const url = "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
-        const heartbeat = (await this.req.post(url, data)).data;
+        const heartbeat = await this._post(url, data);
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
     }
