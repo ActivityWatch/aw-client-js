@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         node-version: [16.x]
-        aw-version: [0.11.0]
+        aw-version: [0.12.0b1]
 
     steps:
     - uses: actions/checkout@v2
