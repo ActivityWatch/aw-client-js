@@ -28,6 +28,8 @@ jobs:
       with:
         path: ./activitywatch
         key: ${{ runner.os }}-activitywatch-${{ matrix.aw-version }}
+    - name: Install deps
+      run: npm ci
     - name: Build
       run: make build
     - name: Download aw-server
@@ -51,6 +53,8 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
+    - name: Install deps
+      run: npm ci
     - name: Build
       run: make build
     - name: Lint
