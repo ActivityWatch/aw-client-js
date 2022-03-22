@@ -223,7 +223,7 @@ export class AWClient {
         });
     }
 
-    public async query(timeperiods: Array<string|{start: Date, end: Date}>, query: string[]): Promise<any> {
+    public async query(timeperiods: (string|{start: Date, end: Date})[], query: string[]): Promise<any> {
         const data = {
             query,
             timeperiods: timeperiods.map(tp => {

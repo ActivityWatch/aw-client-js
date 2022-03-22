@@ -129,7 +129,7 @@ describe("API config behavior", () => {
         const awc = new AWClient(clientName, {
           testing: true,
         });
-        let caught = new Promise((resolve, reject) => {
+        const caught = new Promise((resolve, reject) => {
             awc.getInfo().catch(resolve).then(reject);
         });
         awc.abort();
