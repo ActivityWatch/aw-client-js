@@ -1,37 +1,39 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 
+type EventData = { [k: string]: string | number };
+
 // Default interface for events
 export interface IEvent {
     id?: number;
     timestamp: Date;
-    duration?: number;    // duration in seconds
-    data: { [k: string]: any };
+    duration?: number; // duration in seconds
+    data: EventData;
 }
 
 // Interfaces for coding activity
 export interface IAppEditorEvent extends IEvent {
-    data: {
-        project: string;    // Path to the current project / workDir
-        file: string;       // Path to the current file
-        language: string;   // Coding Language identifier (e.g. javascript, python, ...)
-        [k: string]: any;   // Additional (custom) data
+    data: EventData & {
+        project: string; // Path to the current project / workDir
+        file: string; // Path to the current file
+        language: string; // Coding Language identifier (e.g. javascript, python, ...)
     };
 }
 
 export interface AWReqOptions {
-    controller?: AbortController,
-    testing?: boolean,
-    baseURL?: string
+    controller?: AbortController;
+    testing?: boolean;
+    baseURL?: string;
+    timeout?: number;
 }
 
 export interface IBucket {
-  id: string;
-  name: string;
-  type: string;
-  client: string;
-  hostname: string;
-  created: Date;
-  last_update?: Date;
+    id: string;
+    name: string;
+    type: string;
+    client: string;
+    hostname: string;
+    created: Date;
+    last_update?: Date;
 }
 
 interface IHeartbeatQueueItem {
@@ -42,9 +44,15 @@ interface IHeartbeatQueueItem {
 }
 
 interface IInfo {
-  hostname: string;
-  version: string;
-  testing: boolean;
+    hostname: string;
+    version: string;
+    testing: boolean;
+}
+
+interface GetEventsOptions {
+    start?: Date;
+    end?: Date;
+    limit?: number;
 }
 
 export class AWClient {
@@ -59,7 +67,7 @@ export class AWClient {
         [bucketId: string]: {
             isProcessing: boolean;
             data: IHeartbeatQueueItem[];
-        },
+        };
     } = {};
 
     constructor(clientname: string, options: AWReqOptions = {}) {
@@ -71,26 +79,30 @@ export class AWClient {
             // a possibility it tries to connect to IPv6's `::1`, which will be refused.
             this.baseURL = `http://127.0.0.1:${port}`;
         } else {
-          this.baseURL = options.baseURL;
+            this.baseURL = options.baseURL;
         }
         this.controller = options.controller || new AbortController();
 
         this.req = axios.create({
             baseURL: this.baseURL + "/api",
-            timeout: 30000,
+            timeout: options.timeout || 30000,
         });
     }
 
     private async _get(endpoint: string, params: object = {}) {
-        return this.req.get(endpoint, {...params, signal: this.controller.signal}).then(res => (res && res.data) || res);
+        return this.req
+            .get(endpoint, { ...params, signal: this.controller.signal })
+            .then((res) => (res && res.data) || res);
     }
 
     private async _post(endpoint: string, data: object = {}) {
-        return this.req.post(endpoint, data, {signal: this.controller.signal}).then(res => (res && res.data) || res);
+        return this.req
+            .post(endpoint, data, { signal: this.controller.signal })
+            .then((res) => (res && res.data) || res);
     }
 
     private async _delete(endpoint: string) {
-        return this.req.delete(endpoint, {signal: this.controller.signal});
+        return this.req.delete(endpoint, { signal: this.controller.signal });
     }
 
     public async getInfo(): Promise<IInfo> {
@@ -98,12 +110,16 @@ export class AWClient {
     }
 
     public async abort(msg?: string) {
-        console.info(msg || 'Requests cancelled');
+        console.info(msg || "Requests cancelled");
         this.controller.abort();
         this.controller = new AbortController();
     }
 
-    public async ensureBucket(bucketId: string, type: string, hostname: string): Promise<{ alreadyExist: boolean }> {
+    public async ensureBucket(
+        bucketId: string,
+        type: string,
+        hostname: string
+    ): Promise<{ alreadyExist: boolean }> {
         try {
             await this._post(`/0/buckets/${bucketId}`, {
                 client: this.clientname,
@@ -112,15 +128,23 @@ export class AWClient {
             });
         } catch (err) {
             // Will return 304 if bucket already exists
-            if (axios.isAxiosError(err) && err.response && err.response.status === 304) {
-                return {alreadyExist: true};
+            if (
+                axios.isAxiosError(err) &&
+                err.response &&
+                err.response.status === 304
+            ) {
+                return { alreadyExist: true };
             }
             throw err;
         }
-        return {alreadyExist: false};
+        return { alreadyExist: false };
     }
 
-    public async createBucket(bucketId: string, type: string, hostname: string): Promise<undefined> {
+    public async createBucket(
+        bucketId: string,
+        type: string,
+        hostname: string
+    ): Promise<undefined> {
         await this._post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
             type,
@@ -134,12 +158,14 @@ export class AWClient {
         return undefined;
     }
 
-    public async getBuckets(): Promise<{[bucketId: string]: IBucket}> {
+    public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
         const buckets = await this._get("/0/buckets/");
-        Object.keys(buckets).forEach(bucket => {
+        Object.keys(buckets).forEach((bucket) => {
             buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
-                buckets[bucket].last_updated = new Date(buckets[bucket].last_updated);
+                buckets[bucket].last_updated = new Date(
+                    buckets[bucket].last_updated
+                );
             }
         });
         return buckets;
@@ -153,39 +179,55 @@ export class AWClient {
 
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
         // Get a single event by ID
-        const event = await this._get("/0/buckets/" + bucketId + "/events/" + eventId);
+        const event = await this._get(
+            "/0/buckets/" + bucketId + "/events/" + eventId
+        );
         event.timestamp = new Date(event.timestamp);
         return event;
     }
 
-    public async getEvents(bucketId: string, params: { [k: string]: any }): Promise<IEvent[]> {
-        const events = await this._get("/0/buckets/" + bucketId + "/events", { params });
+    public async getEvents(
+        bucketId: string,
+        params: GetEventsOptions = {}
+    ): Promise<IEvent[]> {
+        const events = await this._get("/0/buckets/" + bucketId + "/events", {
+            params,
+        });
         events.forEach((event: IEvent) => {
             event.timestamp = new Date(event.timestamp);
         });
         return events;
     }
 
-    public async countEvents(bucketId: string, startTime?: Date, endTime?: Date) {
+    public async countEvents(
+        bucketId: string,
+        startTime?: Date,
+        endTime?: Date
+    ) {
         const params = {
             starttime: startTime ? startTime.toISOString() : null,
             endtime: endTime ? endTime.toISOString() : null,
         };
-        return this._get("/0/buckets/" + bucketId + "/events/count", { params });
+        return this._get("/0/buckets/" + bucketId + "/events/count", {
+            params,
+        });
     }
 
     public async insertEvent(bucketId: string, event: IEvent): Promise<void> {
         await this.insertEvents(bucketId, [event]);
     }
 
-    public async insertEvents(bucketId: string, events: IEvent[]): Promise<void> {
+    public async insertEvents(
+        bucketId: string,
+        events: IEvent[]
+    ): Promise<void> {
         await this._post("/0/buckets/" + bucketId + "/events", events);
     }
 
     // Just an alias for insertEvent requiring the event to have an ID assigned
     public async replaceEvent(bucketId: string, event: IEvent): Promise<void> {
         if (event.id === undefined) {
-            throw(Error("Can't replace event without ID assigned"));
+            throw Error("Can't replace event without ID assigned");
         }
         await this.insertEvent(bucketId, event);
     }
@@ -201,9 +243,18 @@ export class AWClient {
      *                  with the previous heartbeat in aw-server
      * @param heartbeat The actual heartbeat event
      */
-    public heartbeat(bucketId: string, pulsetime: number, heartbeat: IEvent): Promise<void> {
+    public heartbeat(
+        bucketId: string,
+        pulsetime: number,
+        heartbeat: IEvent
+    ): Promise<void> {
         // Create heartbeat queue for bucket if not already existing
-        if (!this.heartbeatQueues.hasOwnProperty(bucketId)) {
+        if (
+            !Object.prototype.hasOwnProperty.call(
+                this.heartbeatQueues,
+                bucketId
+            )
+        ) {
             this.heartbeatQueues[bucketId] = {
                 isProcessing: false,
                 data: [],
@@ -223,18 +274,30 @@ export class AWClient {
         });
     }
 
-    public async query(timeperiods: (string|{start: Date, end: Date})[], query: string[]): Promise<any> {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    public async query(
+        timeperiods: (string | { start: Date; end: Date })[],
+        query: string[]
+    ): Promise<any[]> {
         const data = {
             query,
-            timeperiods: timeperiods.map(tp => {
-                return typeof tp !== "string" ? `${tp.start.toISOString()}/${tp.end.toISOString()}` : tp;
+            timeperiods: timeperiods.map((tp) => {
+                return typeof tp !== "string"
+                    ? `${tp.start.toISOString()}/${tp.end.toISOString()}`
+                    : tp;
             }),
         };
         return await this._post("/0/query/", data);
     }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
-    private async send_heartbeat(bucketId: string, pulsetime: number, data: IEvent): Promise<IEvent> {
-        const url = "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
+    private async send_heartbeat(
+        bucketId: string,
+        pulsetime: number,
+        data: IEvent
+    ): Promise<IEvent> {
+        const url =
+            "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
         const heartbeat = await this._post(url, data);
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
@@ -245,17 +308,18 @@ export class AWClient {
         const queue = this.heartbeatQueues[bucketId];
 
         if (!queue.isProcessing && queue.data.length) {
-            const { pulsetime, heartbeat, onSuccess, onError } = queue.data.shift() as IHeartbeatQueueItem;
+            const { pulsetime, heartbeat, onSuccess, onError } =
+                queue.data.shift() as IHeartbeatQueueItem;
 
             queue.isProcessing = true;
             this.send_heartbeat(bucketId, pulsetime, heartbeat)
-                .then((response) => {
+                .then(() => {
                     onSuccess();
                     queue.isProcessing = false;
                     this.updateHeartbeatQueue(bucketId);
                 })
-                .catch((response) => {
-                    onError(response);
+                .catch((err) => {
+                    onError(err);
                     queue.isProcessing = false;
                     this.updateHeartbeatQueue(bucketId);
                 });

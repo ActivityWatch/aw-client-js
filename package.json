@@ -27,8 +27,13 @@
   "devDependencies": {
     "@types/mocha": "*",
     "@types/node": "*",
+    "@typescript-eslint/eslint-plugin": "^5.21.0",
+    "@typescript-eslint/parser": "^5.21.0",
+    "eslint": "^8.14.0",
+    "eslint-plugin-prettier": "*",
     "mocha": "*",
-    "tslint": "*",
-    "typescript": "*"
+    "prettier": "*",
+    "typescript": "*",
+    "typescript-eslint": "*"
   }
 }

@@ -9,5 +9,12 @@ install: package-lock.json
 test:
 	npm run test
 
+LINTFILES=src/**.ts src/test/**.ts
+
 lint:
-	npx tslint src/**.ts src/test/**.ts
+	npx eslint ${LINTFILES}
+	npx prettier ${LINTFILES} --check
+
+lint-fix:
+	npx eslint ${LINTFILES} --fix
+	npx prettier ${LINTFILES} --write
