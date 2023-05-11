@@ -233,7 +233,7 @@ export class AWClient {
         // Check that events don't have IDs
         // To replace an event, use `replaceEvent`, which does the opposite check (requires ID)
         for (const event of events) {
-            if (event.id !== undefined || event.id !== null) {
+            if (event.id !== undefined) {
                 throw Error(`Can't insert event with ID assigned: ${event}`);
             }
         }
