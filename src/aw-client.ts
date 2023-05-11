@@ -220,23 +220,42 @@ export class AWClient {
         });
     }
 
+    // Insert a single event, requires the event to not have an ID assigned
     public async insertEvent(bucketId: string, event: IEvent): Promise<void> {
         await this.insertEvents(bucketId, [event]);
     }
 
+    // Insert multiple events, requires the events to not have IDs assigned
     public async insertEvents(
         bucketId: string,
         events: IEvent[]
     ): Promise<void> {
+        // Check that events don't have IDs
+        // To replace an event, use `replaceEvent`, which does the opposite check (requires ID)
+        for (const event of events) {
+            if (event.id !== undefined || event.id !== null) {
+                throw Error(`Can't insert event with ID assigned: ${event}`);
+            }
+        }
         await this._post("/0/buckets/" + bucketId + "/events", events);
     }
 
-    // Just an alias for insertEvent requiring the event to have an ID assigned
+    // Replace an event, requires the event to have an ID assigned
     public async replaceEvent(bucketId: string, event: IEvent): Promise<void> {
-        if (event.id === undefined) {
-            throw Error("Can't replace event without ID assigned");
+        await this.replaceEvents(bucketId, [event]);
+    }
+
+    // Replace multiple events, requires the events to have IDs assigned
+    public async replaceEvents(
+        bucketId: string,
+        events: IEvent[]
+    ): Promise<void> {
+        for (const event of events) {
+            if (event.id === undefined) {
+                throw Error("Can't replace event without ID assigned");
+            }
         }
-        await this.insertEvent(bucketId, event);
+        await this._post("/0/buckets/" + bucketId + "/events", events);
     }
 
     public async deleteEvent(bucketId: string, eventId: number): Promise<void> {
