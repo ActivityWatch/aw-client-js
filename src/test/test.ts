@@ -50,6 +50,11 @@ describe("Basic API usage", () => {
         assert.equal(resp.testing, true);
     });
 
+    it("get data", async () => {
+        const resp = await awc.getBucketInfo(bucketId);
+        assert.deepEqual(resp.data, {});
+    });
+
     // NOTE: This test will fail in CI until v0.12 is released (with support for 'get event by ID')
     it("Post event, get event and assert", async () => {
         await awc.insertEvent(bucketId, testevent);
