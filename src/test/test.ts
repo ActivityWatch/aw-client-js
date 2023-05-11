@@ -56,20 +56,65 @@ describe("Basic API usage", () => {
     });
 
     // NOTE: This test will fail in CI until v0.12 is released (with support for 'get event by ID')
-    it("Post event, get event and assert", async () => {
+    it("Insert event, get event, replace event, and assert", async () => {
+        // Insert
         await awc.insertEvent(bucketId, testevent);
 
+        // Get all
         const events = await awc.getEvents(bucketId, { limit: 1 });
         assert.equal(events.length, 1);
+        assert.equal(events[0].data.label, testevent.data.label);
 
-        let event: IEvent = events[0];
-        event = await awc.getEvent(bucketId, event.id!);
+        // Replace
+        const newEvent = events[0];
+        const newLabel = "this is a new label";
+        newEvent.data.label = newLabel;
+        await awc.replaceEvent(bucketId, newEvent);
 
+        // Get specific
+        const replacedEvent = await awc.getEvent(bucketId, newEvent.id!);
+
+        // Check that the event is correct
         assert.equal(
-            testevent.timestamp.toISOString(),
-            event.timestamp.toISOString()
+            replacedEvent.timestamp.toISOString(),
+            testevent.timestamp.toISOString()
         );
-        assert.equal(testevent.data.label, event.data.label);
+        assert.equal(replacedEvent.data.label, newLabel);
+
+        // Check that we only have one event
+        const events_after = await awc.getEvents(bucketId, { limit: 1 });
+        assert.equal(events_after.length, 1);
+    });
+
+    it("Checks for presence/absence of event IDs for insert/replace", async () => {
+        // Try replacing event without ID, should fail
+        try {
+            await awc.replaceEvent(bucketId, {
+                timestamp: new Date(),
+                duration: 0,
+                data: {},
+            });
+            assert.fail("Should have thrown error");
+        } catch (err) {
+            if (isAxiosError(err)) {
+                throw err;
+            }
+        }
+
+        // Try inseting event with ID, should fail
+        try {
+            await awc.insertEvent(bucketId, {
+                id: 123,
+                timestamp: new Date(),
+                duration: 0,
+                data: {},
+            });
+            assert.fail("Should have thrown error");
+        } catch (err) {
+            if (isAxiosError(err)) {
+                throw err;
+            }
+        }
     });
 
     it("Create, delete and get buckets", async () => {
