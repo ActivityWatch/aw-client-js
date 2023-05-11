@@ -34,6 +34,7 @@ export interface IBucket {
     hostname: string;
     created: Date;
     last_update?: Date;
+    data: Record<string, unknown>;
 }
 
 interface IHeartbeatQueueItem {
@@ -173,6 +174,12 @@ export class AWClient {
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
         const bucket = await this._get(`/0/buckets/${bucketId}`);
+        if (bucket.data === undefined) {
+            console.warn(
+                "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message."
+            );
+            bucket.data = {};
+        }
         bucket.created = new Date(bucket.created);
         return bucket;
     }
