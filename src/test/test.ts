@@ -1,9 +1,9 @@
 import * as assert from "assert";
-import { AxiosError } from "axios";
+import { FetchError } from "../aw-client";
 import { AWClient, IEvent } from "../aw-client";
 
-function isAxiosError(error: unknown): error is AxiosError {
-    return (error as AxiosError).isAxiosError;
+function isFetchError(error: unknown): error is FetchError {
+    return error instanceof FetchError
 }
 
 // Bucket info
@@ -31,7 +31,7 @@ describe("Basic API usage", () => {
         try {
             return await awc.deleteBucket(bucketId);
         } catch (err) {
-            if (isAxiosError(err)) {
+            if (isFetchError(err)) {
                 if (err.response?.status === 404) {
                     return;
                 }
@@ -96,7 +96,7 @@ describe("Basic API usage", () => {
             });
             assert.fail("Should have thrown error");
         } catch (err) {
-            if (isAxiosError(err)) {
+            if (isFetchError(err)) {
                 throw err;
             }
         }
@@ -111,7 +111,7 @@ describe("Basic API usage", () => {
             });
             assert.fail("Should have thrown error");
         } catch (err) {
-            if (isAxiosError(err)) {
+            if (isFetchError(err)) {
                 throw err;
             }
         }

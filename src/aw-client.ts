@@ -1,4 +1,10 @@
-import axios, { AxiosError, AxiosInstance } from "axios";
+export class FetchError extends Error {
+    response: Response;
+    constructor(res: Response) {
+        super(`Failed fetch with status code ${res.status}`);
+        this.response = res;
+    }
+}
 
 type EventData = { [k: string]: string | number };
 
@@ -23,7 +29,6 @@ export interface AWReqOptions {
     controller?: AbortController;
     testing?: boolean;
     baseURL?: string;
-    timeout?: number;
 }
 
 export interface IBucket {
@@ -39,7 +44,7 @@ export interface IBucket {
 
 interface IHeartbeatQueueItem {
     onSuccess: (value?: PromiseLike<undefined> | undefined) => void;
-    onError: (err: AxiosError) => void;
+    onError: (err: Error) => void;
     pulsetime: number;
     heartbeat: IEvent;
 }
@@ -56,11 +61,17 @@ interface GetEventsOptions {
     limit?: number;
 }
 
+const fetchWithFailure = (input: string, init: RequestInit) =>
+    fetch(input, init).then((res) => {
+        if (res.status >= 300) throw new FetchError(res);
+        return res;
+    });
+
 export class AWClient {
     public clientname: string;
     public baseURL: string;
+    public apiURL: string;
     public testing: boolean;
-    public req: AxiosInstance;
 
     public controller: AbortController;
 
@@ -82,32 +93,35 @@ export class AWClient {
         } else {
             this.baseURL = options.baseURL;
         }
+        this.apiURL = this.baseURL + "/api";
         this.controller = options.controller || new AbortController();
-
-        this.req = axios.create({
-            baseURL: this.baseURL + "/api",
-            timeout: options.timeout || 30000,
-        });
     }
 
     private async _get(endpoint: string, params: object = {}) {
-        return this.req
-            .get(endpoint, { ...params, signal: this.controller.signal })
-            .then((res) => (res && res.data) || res);
+        return fetchWithFailure(`${this.apiURL}${endpoint}`, {
+            ...params,
+            signal: this.controller.signal,
+        });
     }
 
-    private async _post(endpoint: string, data: object = {}) {
-        return this.req
-            .post(endpoint, data, { signal: this.controller.signal })
-            .then((res) => (res && res.data) || res);
+    private async _post(endpoint: string, data: Record<PropertyKey, any> = {}) {
+        return fetchWithFailure(`${this.apiURL}${endpoint}`, {
+            method: "POST",
+            signal: this.controller.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
     }
 
     private async _delete(endpoint: string) {
-        return this.req.delete(endpoint, { signal: this.controller.signal });
+        return fetchWithFailure(`${this.apiURL}${endpoint}`, {
+            method: "DELETE",
+            signal: this.controller.signal,
+        });
     }
 
     public async getInfo(): Promise<IInfo> {
-        return this._get("/0/info");
+        return this._get("/0/info").then((res) => res.json());
     }
 
     public async abort(msg?: string) {
@@ -121,46 +135,39 @@ export class AWClient {
         type: string,
         hostname: string
     ): Promise<{ alreadyExist: boolean }> {
-        try {
-            await this._post(`/0/buckets/${bucketId}`, {
-                client: this.clientname,
-                type,
-                hostname,
+        return this._post(`/0/buckets/${bucketId}`, {
+            client: this.clientname,
+            type,
+            hostname,
+        })
+            .then(() => ({ alreadyExist: false }))
+            .catch((err) => {
+                // Will return 304 if bucket already exists
+                if (err instanceof FetchError && err.response.status === 304) {
+                    return { alreadyExist: true };
+                }
+                throw err;
             });
-        } catch (err) {
-            // Will return 304 if bucket already exists
-            if (
-                axios.isAxiosError(err) &&
-                err.response &&
-                err.response.status === 304
-            ) {
-                return { alreadyExist: true };
-            }
-            throw err;
-        }
-        return { alreadyExist: false };
     }
 
     public async createBucket(
         bucketId: string,
         type: string,
         hostname: string
-    ): Promise<undefined> {
+    ): Promise<void> {
         await this._post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
             type,
             hostname,
         });
-        return undefined;
     }
 
-    public async deleteBucket(bucketId: string): Promise<undefined> {
+    public async deleteBucket(bucketId: string): Promise<void> {
         await this._delete(`/0/buckets/${bucketId}?force=1`);
-        return undefined;
     }
 
     public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
-        const buckets = await this._get("/0/buckets/");
+        const buckets = await this._get("/0/buckets/").then((res) => res.json());
         Object.keys(buckets).forEach((bucket) => {
             buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
@@ -173,7 +180,7 @@ export class AWClient {
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        const bucket = await this._get(`/0/buckets/${bucketId}`);
+        const bucket = await this._get(`/0/buckets/${bucketId}`).then((res) => res.json());
         if (bucket.data === undefined) {
             console.warn(
                 "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message."
@@ -188,7 +195,7 @@ export class AWClient {
         // Get a single event by ID
         const event = await this._get(
             "/0/buckets/" + bucketId + "/events/" + eventId
-        );
+        ).then((res) => res.json());
         event.timestamp = new Date(event.timestamp);
         return event;
     }
@@ -199,7 +206,7 @@ export class AWClient {
     ): Promise<IEvent[]> {
         const events = await this._get("/0/buckets/" + bucketId + "/events", {
             params,
-        });
+        }).then((res) => res.json());
         events.forEach((event: IEvent) => {
             event.timestamp = new Date(event.timestamp);
         });
@@ -217,7 +224,7 @@ export class AWClient {
         };
         return this._get("/0/buckets/" + bucketId + "/events/count", {
             params,
-        });
+        }).then((res) => res.json());
     }
 
     // Insert a single event, requires the event to not have an ID assigned
@@ -307,13 +314,13 @@ export class AWClient {
     ): Promise<any[]> {
         const data = {
             query,
-            timeperiods: timeperiods.map((tp) => {
-                return typeof tp !== "string"
+            timeperiods: timeperiods.map((tp) =>
+                typeof tp !== "string"
                     ? `${tp.start.toISOString()}/${tp.end.toISOString()}`
-                    : tp;
-            }),
+                    : tp
+            ),
         };
-        return await this._post("/0/query/", data);
+        return this._post("/0/query/", data).then((res) => res.json());
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -324,7 +331,7 @@ export class AWClient {
     ): Promise<IEvent> {
         const url =
             "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
-        const heartbeat = await this._post(url, data);
+        const heartbeat = await this._post(url, data).then((res) => res.json());
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
     }
@@ -333,22 +340,21 @@ export class AWClient {
     private updateHeartbeatQueue(bucketId: string) {
         const queue = this.heartbeatQueues[bucketId];
 
-        if (!queue.isProcessing && queue.data.length) {
-            const { pulsetime, heartbeat, onSuccess, onError } =
-                queue.data.shift() as IHeartbeatQueueItem;
+        if (queue.isProcessing || !queue.data.length) return;
+        const { pulsetime, heartbeat, onSuccess, onError } =
+            queue.data.shift() as IHeartbeatQueueItem;
 
-            queue.isProcessing = true;
-            this.send_heartbeat(bucketId, pulsetime, heartbeat)
-                .then(() => {
-                    onSuccess();
-                    queue.isProcessing = false;
-                    this.updateHeartbeatQueue(bucketId);
-                })
-                .catch((err) => {
-                    onError(err);
-                    queue.isProcessing = false;
-                    this.updateHeartbeatQueue(bucketId);
-                });
-        }
+        queue.isProcessing = true;
+        this.send_heartbeat(bucketId, pulsetime, heartbeat)
+            .then(() => {
+                onSuccess();
+                queue.isProcessing = false;
+                this.updateHeartbeatQueue(bucketId);
+            })
+            .catch((err) => {
+                onError(err);
+                queue.isProcessing = false;
+                this.updateHeartbeatQueue(bucketId);
+            });
     }
 }

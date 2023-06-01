@@ -21,9 +21,6 @@
   "files": [
     "out"
   ],
-  "dependencies": {
-    "axios": "*"
-  },
   "devDependencies": {
     "@types/mocha": "*",
     "@types/node": "*",
