@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 
 type EventData = { [k: string]: string | number };
+type JSONable = object | string | number | boolean;
 
 // Default interface for events
 export interface IEvent {
@@ -96,7 +97,7 @@ export class AWClient {
             .then((res) => (res && res.data) || res);
     }
 
-    private async _post(endpoint: string, data: object = {}) {
+    private async _post(endpoint: string, data: JSONable = {}) {
         return this.req
             .post(endpoint, data, { signal: this.controller.signal })
             .then((res) => (res && res.data) || res);
@@ -350,5 +351,20 @@ export class AWClient {
                     this.updateHeartbeatQueue(bucketId);
                 });
         }
+    }
+
+    // Get all settings
+    public async get_settings(): Promise<object> {
+        return await this._get("/0/settings");
+    }
+
+    // Get a setting
+    public async get_setting(key: string): Promise<JSONable> {
+        return await this._get("/0/settings/" + key);
+    }
+
+    // Set a setting
+    public async set_setting(key: string, value: JSONable): Promise<void> {
+        await this._post("/0/settings/" + key, value);
     }
 }
