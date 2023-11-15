@@ -316,11 +316,23 @@ export class AWClient {
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
         query: string[],
-        params: { cache?: boolean; cacheEmpty?: boolean } = {
-            cache: true,
-            cacheEmpty: false,
-        },
+        params: {
+            cache?: boolean;
+            cacheEmpty?: boolean;
+            verbose?: boolean;
+            name?: string;
+        } = {},
     ): Promise<any[]> {
+        params.cache = params.cache ?? true;
+        params.cacheEmpty = params.cacheEmpty ?? false;
+        params.verbose = params.verbose ?? false;
+        params.name = params.name ?? "query";
+
+        function isEmpty(obj: any) {
+            // obj can be an array or an object, this works for both
+            return Object.keys(obj).length === 0;
+        }
+
         const data = {
             query,
             timeperiods: timeperiods.map((tp) => {
@@ -341,11 +353,12 @@ export class AWClient {
                     cacheResults.push(null);
                     continue;
                 }
+
                 // check cache
                 const cacheKey = JSON.stringify({ timeperiod, query });
                 if (
                     this.queryCache[cacheKey] &&
-                    (params.cacheEmpty || this.queryCache[cacheKey].length > 0)
+                    (params.cacheEmpty || !isEmpty(this.queryCache[cacheKey]))
                 ) {
                     cacheResults.push(this.queryCache[cacheKey]);
                 } else {
@@ -355,7 +368,10 @@ export class AWClient {
 
             // If all results were cached, return them
             if (cacheResults.every((r) => r !== null)) {
-                //console.debug("Returning fully cached query results");
+                if (params.verbose)
+                    console.debug(
+                        `Returning fully cached query results for ${params.name}`,
+                    );
                 return cacheResults;
             }
         }
@@ -365,22 +381,29 @@ export class AWClient {
         );
 
         // Otherwise, query with remaining timeperiods
-        const queryResults = await this._post("/0/query/", {
-            ...data,
-            timeperiods: timeperiodsNotCached,
-        });
+        const queryResults =
+            timeperiodsNotCached.length > 0
+                ? await this._post("/0/query/", {
+                      ...data,
+                      timeperiods: timeperiodsNotCached,
+                  })
+                : [];
 
         if (params.cache) {
-            /*
-            if (cacheResults.every((r) => r === null)) {
-                console.debug("Returning uncached query results");
-            } else if (
-                cacheResults.some((r) => r === null) &&
-                cacheResults.some((r) => r !== null)
-            ) {
-                console.debug("Returning partially cached query results");
+            if (params.verbose) {
+                if (cacheResults.every((r) => r === null)) {
+                    console.debug(
+                        `Returning uncached query results for ${params.name}`,
+                    );
+                } else if (
+                    cacheResults.some((r) => r === null) &&
+                    cacheResults.some((r) => r !== null)
+                ) {
+                    console.debug(
+                        `Returning partially cached query results for ${params.name}`,
+                    );
+                }
             }
-            */
 
             // Cache results
             // NOTE: this also caches timeperiods that span the future,
@@ -395,9 +418,9 @@ export class AWClient {
             }
 
             // Return all results from cache
-            return timeperiods.map((_, i) => {
+            return data.timeperiods.map((tp) => {
                 const cacheKey = JSON.stringify({
-                    timeperiod: data.timeperiods[i],
+                    timeperiod: tp,
                     query,
                 });
                 return this.queryCache[cacheKey];
