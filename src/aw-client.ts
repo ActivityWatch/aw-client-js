@@ -91,7 +91,7 @@ export class AWClient {
             timeout: options.timeout || 30000,
         });
 
-        // Cache for queries, by timespan
+        // Cache for queries, by timeperiod
         // TODO: persist cache and add cache expiry/invalidation
         this.queryCache = {};
     }
@@ -307,6 +307,12 @@ export class AWClient {
     }
 
     /* eslint-disable @typescript-eslint/no-explicit-any */
+    /**
+     * Queries the aw-server for data
+     *
+     * If cache is enabled, for each {query, timeperiod} it will return cached data if available,
+     * if a timeperiod spans the future it will not cache it.
+     */
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
         query: string[],
@@ -325,10 +331,10 @@ export class AWClient {
         if (params.cache) {
             // Check cache for each {timeperiod, query} pair
             for (const timeperiod of data.timeperiods) {
-                // check if now is in the timeperiod
-                const [start, stop] = timeperiod.split("/");
+                // check if timeperiod spans the future
+                const stop = new Date(timeperiod.split("/")[1]);
                 const now = new Date();
-                if (start <= now.toISOString() && now.toISOString() <= stop) {
+                if (now < stop) {
                     cacheResults.push(null);
                     continue;
                 }
@@ -371,6 +377,9 @@ export class AWClient {
             */
 
             // Cache results
+            // NOTE: this also caches timeperiods that span the future,
+            //       but this is ok since we check that when first checking the cache,
+            //       and makes it easier to return all results from cache.
             for (const [i, result] of queryResults.entries()) {
                 const cacheKey = JSON.stringify({
                     timeperiod: timeperiodsNotCached[i],
