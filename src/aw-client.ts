@@ -65,7 +65,7 @@ export class AWClient {
 
     public controller: AbortController;
 
-    private queryCache: { string: object };
+    private queryCache: { [cacheKey: string]: object };
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -310,6 +310,7 @@ export class AWClient {
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
         query: string[],
+        params: { cache?: boolean } = { cache: true },
     ): Promise<any[]> {
         const data = {
             query,
@@ -320,47 +321,56 @@ export class AWClient {
             }),
         };
 
-        // Check cache for each {timeperiod, query} pair
         const cacheResults: any[] = [];
-        for (const timeperiod of data.timeperiods) {
-            // check if now is in the timeperiod
-            const [start, stop] = timeperiod.split("/");
-            const now = new Date();
-            if (start <= now.toISOString() && now.toISOString() <= stop) {
-                cacheResults.push(null);
-                continue;
+        if (params.cache) {
+            // Check cache for each {timeperiod, query} pair
+            for (const timeperiod of data.timeperiods) {
+                // check if now is in the timeperiod
+                const [start, stop] = timeperiod.split("/");
+                const now = new Date();
+                if (start <= now.toISOString() && now.toISOString() <= stop) {
+                    cacheResults.push(null);
+                    continue;
+                }
+                // check cache
+                const cacheKey = JSON.stringify({ timeperiod, query });
+                if (this.queryCache[cacheKey]) {
+                    cacheResults.push(this.queryCache[cacheKey]);
+                } else {
+                    cacheResults.push(null);
+                }
             }
-            // check cache
-            const cacheKey = JSON.stringify({ timeperiod, query });
-            if (this.queryCache.has(cacheKey)) {
-                cacheResults.push(this.queryCache.get(cacheKey));
-            } else {
-                cacheResults.push(null);
+
+            // If all results were cached, return them
+            if (cacheResults.every((r) => r !== null)) {
+                return cacheResults;
             }
+
+            // Otherwise, query with remaining timeperiods
+            data.timeperiods = data.timeperiods.filter(
+                (_, i) => cacheResults[i] === null,
+            );
         }
 
-        // If all results were cached, return them
-        if (cacheResults.every((r) => r !== null)) {
-            return cacheResults;
-        }
-
-        // Otherwise, query with remaining timeperiods
-        data.timeperiods = data.timeperiods.filter(
-            (_, i) => cacheResults[i] === null,
-        );
         const queryResults = await this._post("/0/query/", data);
 
-        // Cache results
-        for (const [i, result] of queryResults.entries()) {
-            const cacheKey = JSON.stringify({
-                timeperiod: data.timeperiods[i],
-                query,
-            });
-            this.queryCache.set(cacheKey, result);
-        }
+        if (params.cache) {
+            // Cache results
+            for (const [i, result] of queryResults.entries()) {
+                const cacheKey = JSON.stringify({
+                    timeperiod: data.timeperiods[i],
+                    query,
+                });
+                this.queryCache[cacheKey] = result;
+            }
 
-        // Return all results
-        return cacheResults.map((r, i) => r ?? queryResults[i]);
+            // Return all results
+            return cacheResults.map(
+                (r: any, i: number) => r ?? queryResults[i],
+            );
+        } else {
+            return queryResults;
+        }
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
 
