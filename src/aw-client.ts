@@ -343,31 +343,50 @@ export class AWClient {
 
             // If all results were cached, return them
             if (cacheResults.every((r) => r !== null)) {
+                //console.debug("Returning fully cached query results");
                 return cacheResults;
             }
-
-            // Otherwise, query with remaining timeperiods
-            data.timeperiods = data.timeperiods.filter(
-                (_, i) => cacheResults[i] === null,
-            );
         }
 
-        const queryResults = await this._post("/0/query/", data);
+        const timeperiodsNotCached = data.timeperiods.filter(
+            (_, i) => cacheResults[i] === null,
+        );
+
+        // Otherwise, query with remaining timeperiods
+        const queryResults = await this._post("/0/query/", {
+            ...data,
+            timeperiods: timeperiodsNotCached,
+        });
 
         if (params.cache) {
+            /*
+            if (cacheResults.every((r) => r === null)) {
+                console.debug("Returning uncached query results");
+            } else if (
+                cacheResults.some((r) => r === null) &&
+                cacheResults.some((r) => r !== null)
+            ) {
+                console.debug("Returning partially cached query results");
+            }
+            */
+
             // Cache results
             for (const [i, result] of queryResults.entries()) {
                 const cacheKey = JSON.stringify({
-                    timeperiod: data.timeperiods[i],
+                    timeperiod: timeperiodsNotCached[i],
                     query,
                 });
                 this.queryCache[cacheKey] = result;
             }
 
-            // Return all results
-            return cacheResults.map(
-                (r: any, i: number) => r ?? queryResults[i],
-            );
+            // Return all results from cache
+            return timeperiods.map((_, i) => {
+                const cacheKey = JSON.stringify({
+                    timeperiod: data.timeperiods[i],
+                    query,
+                });
+                return this.queryCache[cacheKey];
+            });
         } else {
             return queryResults;
         }

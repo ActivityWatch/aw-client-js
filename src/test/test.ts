@@ -155,10 +155,15 @@ describe("Basic API usage", () => {
     });
 
     it("Query", async () => {
-        const e1 = { ...testevent, timestamp: new Date("2022-01-01") };
-        const e2 = { ...testevent, timestamp: new Date("2022-01-02") };
+        const d1 = new Date("2022-01-01");
+        const d2 = new Date("2022-01-02");
+        const d3 = new Date("2022-01-03");
+        const e1 = { ...testevent, timestamp: d1 };
+        const e2 = { ...testevent, timestamp: d2 };
+        const e3 = { ...testevent, timestamp: d3 };
         await awc.heartbeat(bucketId, 5, e1);
         await awc.heartbeat(bucketId, 5, e2);
+        await awc.heartbeat(bucketId, 5, e3);
 
         // Both these are valid timeperiod specs
         const timeperiods = [
@@ -178,7 +183,20 @@ describe("Basic API usage", () => {
             e2.timestamp.toISOString(),
             new Date(resp_e1.timestamp).toISOString(),
         );
-        assert.equal(e2.data.label, resp[0][0].data.label);
+        assert.equal(e2.data.label, resp_e1.data.label);
+
+        // Run query again and check that the results are the same (correctly cached)
+        const resp2: IEvent[][] = await awc.query(timeperiods, query);
+        assert.deepEqual(resp, resp2);
+
+        // Add a timeperiod and query again, to check that partial cache works
+        const timeperiods2 = [
+            { start: d1, end: d2 },
+            { start: d2, end: d3 },
+        ];
+        const resp3: IEvent[][] = await awc.query(timeperiods2, query);
+        assert.equal(2, resp3[0].length);
+        assert.equal(2, resp3[1].length);
     });
 });
 
