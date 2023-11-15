@@ -77,7 +77,7 @@ describe("Basic API usage", () => {
         // Check that the event is correct
         assert.equal(
             replacedEvent.timestamp.toISOString(),
-            testevent.timestamp.toISOString()
+            testevent.timestamp.toISOString(),
         );
         assert.equal(replacedEvent.data.label, newLabel);
 
@@ -148,7 +148,7 @@ describe("Basic API usage", () => {
                 };
 
                 return awc.heartbeat(bucketId, 5, newEvent);
-            })
+            }),
         );
         const events = await awc.getEvents(bucketId);
         assert.equal(events.length, 1);
@@ -171,12 +171,12 @@ describe("Basic API usage", () => {
         const resp_e2: IEvent = resp[0][1];
         assert.equal(
             e1.timestamp.toISOString(),
-            new Date(resp_e2.timestamp).toISOString()
+            new Date(resp_e2.timestamp).toISOString(),
         );
         assert.equal(e1.data.label, resp_e2.data.label);
         assert.equal(
             e2.timestamp.toISOString(),
-            new Date(resp_e1.timestamp).toISOString()
+            new Date(resp_e1.timestamp).toISOString(),
         );
         assert.equal(e2.data.label, resp[0][0].data.label);
     });
