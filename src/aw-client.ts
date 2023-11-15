@@ -65,6 +65,7 @@ export class AWClient {
 
     public controller: AbortController;
 
+    private queryCache: { [cacheKey: string]: object[] };
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -89,6 +90,10 @@ export class AWClient {
             baseURL: this.baseURL + "/api",
             timeout: options.timeout || 30000,
         });
+
+        // Cache for queries, by timeperiod
+        // TODO: persist cache and add cache expiry/invalidation
+        this.queryCache = {};
     }
 
     private async _get(endpoint: string, params: object = {}) {
@@ -120,7 +125,7 @@ export class AWClient {
     public async ensureBucket(
         bucketId: string,
         type: string,
-        hostname: string
+        hostname: string,
     ): Promise<{ alreadyExist: boolean }> {
         try {
             await this._post(`/0/buckets/${bucketId}`, {
@@ -145,7 +150,7 @@ export class AWClient {
     public async createBucket(
         bucketId: string,
         type: string,
-        hostname: string
+        hostname: string,
     ): Promise<undefined> {
         await this._post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
@@ -166,7 +171,7 @@ export class AWClient {
             buckets[bucket].created = new Date(buckets[bucket].created);
             if (buckets[bucket].last_updated) {
                 buckets[bucket].last_updated = new Date(
-                    buckets[bucket].last_updated
+                    buckets[bucket].last_updated,
                 );
             }
         });
@@ -177,7 +182,7 @@ export class AWClient {
         const bucket = await this._get(`/0/buckets/${bucketId}`);
         if (bucket.data === undefined) {
             console.warn(
-                "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message."
+                "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message.",
             );
             bucket.data = {};
         }
@@ -188,7 +193,7 @@ export class AWClient {
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
         // Get a single event by ID
         const event = await this._get(
-            "/0/buckets/" + bucketId + "/events/" + eventId
+            "/0/buckets/" + bucketId + "/events/" + eventId,
         );
         event.timestamp = new Date(event.timestamp);
         return event;
@@ -196,7 +201,7 @@ export class AWClient {
 
     public async getEvents(
         bucketId: string,
-        params: GetEventsOptions = {}
+        params: GetEventsOptions = {},
     ): Promise<IEvent[]> {
         const events = await this._get("/0/buckets/" + bucketId + "/events", {
             params,
@@ -210,7 +215,7 @@ export class AWClient {
     public async countEvents(
         bucketId: string,
         startTime?: Date,
-        endTime?: Date
+        endTime?: Date,
     ) {
         const params = {
             starttime: startTime ? startTime.toISOString() : null,
@@ -229,7 +234,7 @@ export class AWClient {
     // Insert multiple events, requires the events to not have IDs assigned
     public async insertEvents(
         bucketId: string,
-        events: IEvent[]
+        events: IEvent[],
     ): Promise<void> {
         // Check that events don't have IDs
         // To replace an event, use `replaceEvent`, which does the opposite check (requires ID)
@@ -249,7 +254,7 @@ export class AWClient {
     // Replace multiple events, requires the events to have IDs assigned
     public async replaceEvents(
         bucketId: string,
-        events: IEvent[]
+        events: IEvent[],
     ): Promise<void> {
         for (const event of events) {
             if (event.id === undefined) {
@@ -273,13 +278,13 @@ export class AWClient {
     public heartbeat(
         bucketId: string,
         pulsetime: number,
-        heartbeat: IEvent
+        heartbeat: IEvent,
     ): Promise<void> {
         // Create heartbeat queue for bucket if not already existing
         if (
             !Object.prototype.hasOwnProperty.call(
                 this.heartbeatQueues,
-                bucketId
+                bucketId,
             )
         ) {
             this.heartbeatQueues[bucketId] = {
@@ -302,9 +307,19 @@ export class AWClient {
     }
 
     /* eslint-disable @typescript-eslint/no-explicit-any */
+    /**
+     * Queries the aw-server for data
+     *
+     * If cache is enabled, for each {query, timeperiod} it will return cached data if available,
+     * if a timeperiod spans the future it will not cache it.
+     */
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
-        query: string[]
+        query: string[],
+        params: { cache?: boolean; cacheEmpty?: boolean } = {
+            cache: true,
+            cacheEmpty: false,
+        },
     ): Promise<any[]> {
         const data = {
             query,
@@ -314,14 +329,89 @@ export class AWClient {
                     : tp;
             }),
         };
-        return await this._post("/0/query/", data);
+
+        const cacheResults: any[] = [];
+        if (params.cache) {
+            // Check cache for each {timeperiod, query} pair
+            for (const timeperiod of data.timeperiods) {
+                // check if timeperiod spans the future
+                const stop = new Date(timeperiod.split("/")[1]);
+                const now = new Date();
+                if (now < stop) {
+                    cacheResults.push(null);
+                    continue;
+                }
+                // check cache
+                const cacheKey = JSON.stringify({ timeperiod, query });
+                if (
+                    this.queryCache[cacheKey] &&
+                    (params.cacheEmpty || this.queryCache[cacheKey].length > 0)
+                ) {
+                    cacheResults.push(this.queryCache[cacheKey]);
+                } else {
+                    cacheResults.push(null);
+                }
+            }
+
+            // If all results were cached, return them
+            if (cacheResults.every((r) => r !== null)) {
+                //console.debug("Returning fully cached query results");
+                return cacheResults;
+            }
+        }
+
+        const timeperiodsNotCached = data.timeperiods.filter(
+            (_, i) => cacheResults[i] === null,
+        );
+
+        // Otherwise, query with remaining timeperiods
+        const queryResults = await this._post("/0/query/", {
+            ...data,
+            timeperiods: timeperiodsNotCached,
+        });
+
+        if (params.cache) {
+            /*
+            if (cacheResults.every((r) => r === null)) {
+                console.debug("Returning uncached query results");
+            } else if (
+                cacheResults.some((r) => r === null) &&
+                cacheResults.some((r) => r !== null)
+            ) {
+                console.debug("Returning partially cached query results");
+            }
+            */
+
+            // Cache results
+            // NOTE: this also caches timeperiods that span the future,
+            //       but this is ok since we check that when first checking the cache,
+            //       and makes it easier to return all results from cache.
+            for (const [i, result] of queryResults.entries()) {
+                const cacheKey = JSON.stringify({
+                    timeperiod: timeperiodsNotCached[i],
+                    query,
+                });
+                this.queryCache[cacheKey] = result;
+            }
+
+            // Return all results from cache
+            return timeperiods.map((_, i) => {
+                const cacheKey = JSON.stringify({
+                    timeperiod: data.timeperiods[i],
+                    query,
+                });
+                return this.queryCache[cacheKey];
+            });
+        } else {
+            return queryResults;
+        }
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
 
     private async send_heartbeat(
         bucketId: string,
         pulsetime: number,
-        data: IEvent
+        data: IEvent,
     ): Promise<IEvent> {
         const url =
             "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
