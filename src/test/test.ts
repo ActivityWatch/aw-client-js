@@ -197,6 +197,27 @@ describe("Basic API usage", () => {
         const resp3: IEvent[][] = await awc.query(timeperiods2, query);
         assert.equal(2, resp3[0].length);
         assert.equal(2, resp3[1].length);
+
+        // Query a timeperiod without events in the past,
+        // then add an event for the timeperiod, and query again.
+        // This is to check that we don't cache when the query returned nothing.
+        const timeperiods3 = [
+            { start: new Date("1980-1-1"), end: new Date("1980-1-2") },
+        ];
+        const resp4: IEvent[][] = await awc.query(timeperiods3, query);
+
+        // Check that the result is empty
+        assert.equal(0, resp4[0].length);
+
+        // Add an event for the timeperiod
+        await awc.heartbeat(bucketId, 5, {
+            ...testevent,
+            timestamp: new Date("1980-1-1"),
+        });
+
+        // Query again and check that the result is not empty
+        const resp5: IEvent[][] = await awc.query(timeperiods3, query);
+        assert.equal(1, resp5[0].length);
     });
 });
 

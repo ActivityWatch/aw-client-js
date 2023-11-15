@@ -65,7 +65,7 @@ export class AWClient {
 
     public controller: AbortController;
 
-    private queryCache: { [cacheKey: string]: object };
+    private queryCache: { [cacheKey: string]: object[] };
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -316,7 +316,10 @@ export class AWClient {
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
         query: string[],
-        params: { cache?: boolean } = { cache: true },
+        params: { cache?: boolean; cacheEmpty?: boolean } = {
+            cache: true,
+            cacheEmpty: false,
+        },
     ): Promise<any[]> {
         const data = {
             query,
@@ -340,7 +343,10 @@ export class AWClient {
                 }
                 // check cache
                 const cacheKey = JSON.stringify({ timeperiod, query });
-                if (this.queryCache[cacheKey]) {
+                if (
+                    this.queryCache[cacheKey] &&
+                    (params.cacheEmpty || this.queryCache[cacheKey].length > 0)
+                ) {
                     cacheResults.push(this.queryCache[cacheKey]);
                 } else {
                     cacheResults.push(null);
