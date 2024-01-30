@@ -9,6 +9,12 @@ export class FetchError extends Error {
 type EventData = { [k: string]: string | number };
 
 // Default interface for events
+interface IEventRaw {
+    id?: number;
+    timestamp: string;
+    duration?: number;
+    data: EventData;
+}
 export interface IEvent {
     id?: number;
     timestamp: Date;
@@ -29,8 +35,19 @@ export interface AWReqOptions {
     controller?: AbortController;
     testing?: boolean;
     baseURL?: string;
+    timeout?: number;
 }
 
+interface IBucketRaw {
+    id: string;
+    name: string;
+    type: string;
+    client: string;
+    hostname: string;
+    created: string;
+    last_update?: string;
+    data: Record<string, unknown>;
+}
 export interface IBucket {
     id: string;
     name: string;
@@ -61,16 +78,45 @@ interface GetEventsOptions {
     limit?: number;
 }
 
-const fetchWithFailure = (input: string, init: RequestInit) =>
-    fetch(input, init).then((res) => {
-        if (res.status >= 300) throw new FetchError(res);
-        return res;
-    });
+function makeTimeoutAbortSignal(
+    timeout?: number,
+    existingSignal?: AbortSignal
+) {
+    if (timeout === undefined)
+        return { signal: existingSignal, timeoutId: undefined };
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(
+        () => abortController.abort(),
+        timeout || 10000
+    );
+    // Sync with existing abort signal if it exists
+    if (existingSignal?.aborted) abortController.abort();
+    else
+        existingSignal?.addEventListener("abort", () =>
+            abortController.abort()
+        );
+    return { signal: abortController.signal, timeoutId };
+}
+
+async function fetchWithFailure(
+    input: string,
+    init: RequestInit,
+    timeout?: number
+): Promise<Response> {
+    const { signal, timeoutId } = makeTimeoutAbortSignal(timeout, init.signal);
+    return fetch(input, { ...init, signal })
+        .then((res) => {
+            if (res.status >= 300) throw new FetchError(res);
+            return res;
+        })
+        .finally(() => clearTimeout(timeoutId));
+}
 
 export class AWClient {
     public clientname: string;
     public baseURL: string;
     public apiURL: string;
+    public timeout: number;
     public testing: boolean;
 
     public controller: AbortController;
@@ -84,7 +130,8 @@ export class AWClient {
 
     constructor(clientname: string, options: AWReqOptions = {}) {
         this.clientname = clientname;
-        this.testing = options.testing || false;
+        this.testing = options.testing ?? false;
+        this.timeout = options.timeout ?? 30000;
         if (typeof options.baseURL === "undefined") {
             const port = !options.testing ? 5600 : 5666;
             // Note: had to switch to 127.0.0.1 over localhost as otherwise there's
@@ -97,37 +144,63 @@ export class AWClient {
         this.controller = options.controller || new AbortController();
     }
 
-    private async _get(endpoint: string, params: object = {}) {
-        return fetchWithFailure(`${this.apiURL}${endpoint}`, {
-            ...params,
-            signal: this.controller.signal,
-        });
+    /// Fetching logic
+    /** Makes a GET request, assuming the response is JSON and parsing it */
+    private async _get<T>(endpoint: string, params: RequestInit = {}) {
+        return fetchWithFailure(
+            `${this.apiURL}${endpoint}`,
+            {
+                ...params,
+                signal: this.controller.signal,
+            },
+            this.timeout
+        ).then((res) => res.json() as Promise<T>);
     }
 
     private async _post(endpoint: string, data: Record<PropertyKey, any> = {}) {
-        return fetchWithFailure(`${this.apiURL}${endpoint}`, {
-            method: "POST",
-            signal: this.controller.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-        });
+        return fetchWithFailure(
+            `${this.apiURL}${endpoint}`,
+            {
+                method: "POST",
+                signal: this.controller.signal,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            },
+            this.timeout
+        );
     }
 
     private async _delete(endpoint: string) {
-        return fetchWithFailure(`${this.apiURL}${endpoint}`, {
-            method: "DELETE",
-            signal: this.controller.signal,
-        });
+        return fetchWithFailure(
+            `${this.apiURL}${endpoint}`,
+            {
+                method: "DELETE",
+                signal: this.controller.signal,
+            },
+            this.timeout
+        );
     }
 
     public async getInfo(): Promise<IInfo> {
-        return this._get("/0/info").then((res) => res.json());
+        return this._get<IInfo>("/0/info");
     }
 
     public async abort(msg?: string) {
         console.info(msg || "Requests cancelled");
         this.controller.abort();
         this.controller = new AbortController();
+    }
+
+    /// Buckets
+    private processRawBucket(bucket: IBucketRaw): IBucket {
+        return {
+            ...bucket,
+            created: new Date(bucket.created),
+            last_update:
+                bucket.last_update !== undefined
+                    ? new Date(bucket.last_update)
+                    : undefined,
+        };
     }
 
     public async ensureBucket(
@@ -167,72 +240,73 @@ export class AWClient {
     }
 
     public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
-        const buckets = await this._get("/0/buckets/").then((res) => res.json());
-        Object.keys(buckets).forEach((bucket) => {
-            buckets[bucket].created = new Date(buckets[bucket].created);
-            if (buckets[bucket].last_updated) {
-                buckets[bucket].last_updated = new Date(
-                    buckets[bucket].last_updated
-                );
-            }
-        });
+        const rawBuckets = await this._get<{ [bucketId: string]: IBucketRaw }>(
+            "/0/buckets/"
+        );
+        const buckets: { [bucketId: string]: IBucket } = {};
+        for (const bucketId of Object.keys(rawBuckets)) {
+            buckets[bucketId] = this.processRawBucket(rawBuckets[bucketId]);
+        }
         return buckets;
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        const bucket = await this._get(`/0/buckets/${bucketId}`).then((res) => res.json());
+        const bucket = await this._get<IBucketRaw>(`/0/buckets/${bucketId}`);
         if (bucket.data === undefined) {
             console.warn(
                 "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message."
             );
             bucket.data = {};
         }
-        bucket.created = new Date(bucket.created);
-        return bucket;
+        return this.processRawBucket(bucket);
     }
 
+    /// Events
+    private processRawEvent(event: IEventRaw): IEvent {
+        return { ...event, timestamp: new Date(event.timestamp) };
+    }
+
+    /** Get a single event by ID */
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
-        // Get a single event by ID
-        const event = await this._get(
-            "/0/buckets/" + bucketId + "/events/" + eventId
-        ).then((res) => res.json());
-        event.timestamp = new Date(event.timestamp);
-        return event;
+        return this._get<IEventRaw>(
+            `/0/buckets/${bucketId}/events/${eventId}`
+        ).then(this.processRawEvent);
     }
 
+    /** Get events, with optional date ranges and limit */
     public async getEvents(
         bucketId: string,
         params: GetEventsOptions = {}
     ): Promise<IEvent[]> {
-        const events = await this._get("/0/buckets/" + bucketId + "/events", {
-            params,
-        }).then((res) => res.json());
-        events.forEach((event: IEvent) => {
-            event.timestamp = new Date(event.timestamp);
-        });
-        return events;
+        const searchParams = new URLSearchParams();
+        if (params.start) searchParams.set("start", params.start.toISOString());
+        if (params.end) searchParams.set("end", params.end.toISOString());
+        if (params.limit) searchParams.set("limit", params.limit.toString());
+        const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
+        return this._get<IEventRaw[]>(url).then((events) =>
+            events.map(this.processRawEvent)
+        );
     }
 
+    /** Count the number of events, with optional date ranges */
     public async countEvents(
         bucketId: string,
         startTime?: Date,
         endTime?: Date
     ) {
-        const params = {
-            starttime: startTime ? startTime.toISOString() : null,
-            endtime: endTime ? endTime.toISOString() : null,
-        };
-        return this._get("/0/buckets/" + bucketId + "/events/count", {
-            params,
-        }).then((res) => res.json());
+        const params = new URLSearchParams();
+        if (startTime) params.set("starttime", startTime.toISOString());
+        if (endTime) params.set("endtime", endTime.toISOString());
+        const url = `/0/buckets/${bucketId}/events/count?${params.toString()}`;
+        return this._get<number>(url);
     }
 
-    // Insert a single event, requires the event to not have an ID assigned
+    /** Insert a single event, requires the event to not have an ID assigned */
     public async insertEvent(bucketId: string, event: IEvent): Promise<void> {
         await this.insertEvents(bucketId, [event]);
     }
 
-    // Insert multiple events, requires the events to not have IDs assigned
+    /** Insert multiple events, requires the events to not have IDs assigned */
     public async insertEvents(
         bucketId: string,
         events: IEvent[]
@@ -247,12 +321,12 @@ export class AWClient {
         await this._post("/0/buckets/" + bucketId + "/events", events);
     }
 
-    // Replace an event, requires the event to have an ID assigned
+    /** Replace an event, requires the event to have an ID assigned */
     public async replaceEvent(bucketId: string, event: IEvent): Promise<void> {
         await this.replaceEvents(bucketId, [event]);
     }
 
-    // Replace multiple events, requires the events to have IDs assigned
+    /** Replace multiple events, requires the events to have IDs assigned */
     public async replaceEvents(
         bucketId: string,
         events: IEvent[]
@@ -265,12 +339,12 @@ export class AWClient {
         await this._post("/0/buckets/" + bucketId + "/events", events);
     }
 
+    /** Delete an event by ID */
     public async deleteEvent(bucketId: string, eventId: number): Promise<void> {
         await this._delete("/0/buckets/" + bucketId + "/events/" + eventId);
     }
 
     /**
-     *
      * @param bucketId The id of the bucket to send the heartbeat to
      * @param pulsetime The maximum amount of time in seconds since the last heartbeat to be merged
      *                  with the previous heartbeat in aw-server
@@ -282,17 +356,10 @@ export class AWClient {
         heartbeat: IEvent
     ): Promise<void> {
         // Create heartbeat queue for bucket if not already existing
-        if (
-            !Object.prototype.hasOwnProperty.call(
-                this.heartbeatQueues,
-                bucketId
-            )
-        ) {
-            this.heartbeatQueues[bucketId] = {
-                isProcessing: false,
-                data: [],
-            };
-        }
+        this.heartbeatQueues[bucketId] ??= {
+            isProcessing: false,
+            data: [],
+        };
 
         return new Promise((resolve, reject) => {
             // Add heartbeat request to queue
@@ -307,7 +374,6 @@ export class AWClient {
         });
     }
 
-    /* eslint-disable @typescript-eslint/no-explicit-any */
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
         query: string[]
@@ -320,9 +386,10 @@ export class AWClient {
                     : tp
             ),
         };
-        return this._post("/0/query/", data).then((res) => res.json());
+        return this._post("/0/query/", data).then(
+            (res) => res.json() as Promise<any[]>
+        );
     }
-    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     private async send_heartbeat(
         bucketId: string,
@@ -331,12 +398,14 @@ export class AWClient {
     ): Promise<IEvent> {
         const url =
             "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
-        const heartbeat = await this._post(url, data).then((res) => res.json());
+        const heartbeat = await this._post(url, data).then(
+            (res) => res.json() as Promise<any>
+        );
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
     }
 
-    // Start heartbeat queue processing if not currently processing
+    /** Start heartbeat queue processing if not currently processing */
     private updateHeartbeatQueue(bucketId: string) {
         const queue = this.heartbeatQueues[bucketId];
 
