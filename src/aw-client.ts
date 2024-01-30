@@ -8,6 +8,11 @@ export class FetchError extends Error {
 
 type EventData = { [k: string]: string | number };
 
+type JSONPrimitive = string | number | boolean | null;
+type JSONValue = JSONPrimitive | JSONObject | JSONArray;
+type JSONArray = Array<JSONValue>;
+type JSONObject = { [member: string]: JSONValue };
+
 // Default interface for events
 interface IEventRaw {
     id?: number;
@@ -121,6 +126,7 @@ export class AWClient {
 
     public controller: AbortController;
 
+    private queryCache: { [cacheKey: string]: object[] };
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -142,6 +148,10 @@ export class AWClient {
         }
         this.apiURL = this.baseURL + "/api";
         this.controller = options.controller || new AbortController();
+
+        // Cache for queries, by timeperiod
+        // TODO: persist cache and add cache expiry/invalidation
+        this.queryCache = {};
     }
 
     /// Fetching logic
@@ -157,7 +167,7 @@ export class AWClient {
         ).then((res) => res.json() as Promise<T>);
     }
 
-    private async _post(endpoint: string, data: Record<PropertyKey, any> = {}) {
+    private async _post(endpoint: string, data: Record<string, any>) {
         return fetchWithFailure(
             `${this.apiURL}${endpoint}`,
             {
@@ -374,10 +384,33 @@ export class AWClient {
         });
     }
 
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    /**
+     * Queries the aw-server for data
+     *
+     * If cache is enabled, for each {query, timeperiod} it will return cached data if available,
+     * if a timeperiod spans the future it will not cache it.
+     */
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
-        query: string[]
+        query: string[],
+        params: {
+            cache?: boolean;
+            cacheEmpty?: boolean;
+            verbose?: boolean;
+            name?: string;
+        } = {}
     ): Promise<any[]> {
+        params.cache = params.cache ?? true;
+        params.cacheEmpty = params.cacheEmpty ?? false;
+        params.verbose = params.verbose ?? false;
+        params.name = params.name ?? "query";
+
+        function isEmpty(obj: any) {
+            // obj can be an array or an object, this works for both
+            return Object.keys(obj).length === 0;
+        }
+
         const data = {
             query,
             timeperiods: timeperiods.map((tp) =>
@@ -386,9 +419,91 @@ export class AWClient {
                     : tp
             ),
         };
-        return this._post("/0/query/", data).then(
-            (res) => res.json() as Promise<any[]>
+
+        const cacheResults: any[] = [];
+        if (params.cache) {
+            // Check cache for each {timeperiod, query} pair
+            for (const timeperiod of data.timeperiods) {
+                // check if timeperiod spans the future
+                const stop = new Date(timeperiod.split("/")[1]);
+                const now = new Date();
+                if (now < stop) {
+                    cacheResults.push(null);
+                    continue;
+                }
+
+                // check cache
+                const cacheKey = JSON.stringify({ timeperiod, query });
+                if (
+                    this.queryCache[cacheKey] &&
+                    (params.cacheEmpty || !isEmpty(this.queryCache[cacheKey]))
+                ) {
+                    cacheResults.push(this.queryCache[cacheKey]);
+                } else {
+                    cacheResults.push(null);
+                }
+            }
+
+            // If all results were cached, return them
+            if (cacheResults.every((r) => r !== null)) {
+                if (params.verbose)
+                    console.debug(
+                        `Returning fully cached query results for ${params.name}`
+                    );
+                return cacheResults;
+            }
+        }
+
+        const timeperiodsNotCached = data.timeperiods.filter(
+            (_, i) => cacheResults[i] === null
         );
+
+        // Otherwise, query with remaining timeperiods
+        const queryResults =
+            timeperiodsNotCached.length > 0
+                ? await this._post("/0/query/", {
+                      ...data,
+                      timeperiods: timeperiodsNotCached,
+                  }).then((res) => res.json() as Promise<any[]>)
+                : [];
+
+        if (!params.cache) return queryResults;
+
+        if (params.verbose) {
+            if (cacheResults.every((r) => r === null)) {
+                console.debug(
+                    `Returning uncached query results for ${params.name}`
+                );
+            } else if (
+                cacheResults.some((r) => r === null) &&
+                cacheResults.some((r) => r !== null)
+            ) {
+                console.debug(
+                    `Returning partially cached query results for ${params.name}`
+                );
+            }
+        }
+
+        // Cache results
+        // NOTE: this also caches timeperiods that span the future,
+        //       but this is ok since we check that when first checking the cache,
+        //       and makes it easier to return all results from cache.
+        for (const [i, result] of queryResults.entries()) {
+            const cacheKey = JSON.stringify({
+                timeperiod: timeperiodsNotCached[i],
+                query,
+            });
+            this.queryCache[cacheKey] = result;
+        }
+
+        // Return all results from cache
+        return data.timeperiods.map((tp) => {
+            const cacheKey = JSON.stringify({
+                timeperiod: tp,
+                query,
+            });
+            return this.queryCache[cacheKey];
+        });
     }
 
     private async send_heartbeat(
@@ -425,5 +540,20 @@ export class AWClient {
                 queue.isProcessing = false;
                 this.updateHeartbeatQueue(bucketId);
             });
+    }
+
+    // Get all settings
+    public async get_settings(): Promise<object> {
+        return await this._get("/0/settings");
+    }
+
+    // Get a setting
+    public async get_setting(key: string): Promise<JSONObject> {
+        return await this._get("/0/settings/" + key);
+    }
+
+    // Set a setting
+    public async set_setting(key: string, value: JSONObject): Promise<void> {
+        await this._post("/0/settings/" + key, value);
     }
 }
