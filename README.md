@@ -14,7 +14,7 @@ npm install aw-client
 
 ## Usage
 
-The library uses Promises for almost everything, so either use `.then()` or the (recommended) async/aways syntax.
+The library uses Promises for almost everything, so either use `.then()` or async/await syntax.
 
 The example below is written with `.then()` to make it easy to run in the node REPL.
 
@@ -55,5 +55,5 @@ npm run compile
 ### Run the tests
 
 ```sh
-npm run test
+npm test
 ```
