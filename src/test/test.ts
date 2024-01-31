@@ -3,7 +3,7 @@ import { FetchError } from "../aw-client";
 import { AWClient, IEvent } from "../aw-client";
 
 function isFetchError(error: unknown): error is FetchError {
-    return error instanceof FetchError
+    return error instanceof FetchError;
 }
 
 // Bucket info

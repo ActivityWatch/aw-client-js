@@ -85,20 +85,20 @@ interface GetEventsOptions {
 
 function makeTimeoutAbortSignal(
     timeout?: number,
-    existingSignal?: AbortSignal
+    existingSignal?: AbortSignal,
 ) {
     if (timeout === undefined)
         return { signal: existingSignal, timeoutId: undefined };
     const abortController = new AbortController();
     const timeoutId = setTimeout(
         () => abortController.abort(),
-        timeout || 10000
+        timeout || 10000,
     );
     // Sync with existing abort signal if it exists
     if (existingSignal?.aborted) abortController.abort();
     else
         existingSignal?.addEventListener("abort", () =>
-            abortController.abort()
+            abortController.abort(),
         );
     return { signal: abortController.signal, timeoutId };
 }
@@ -106,7 +106,7 @@ function makeTimeoutAbortSignal(
 async function fetchWithFailure(
     input: string,
     init: RequestInit,
-    timeout?: number
+    timeout?: number,
 ): Promise<Response> {
     const { signal, timeoutId } = makeTimeoutAbortSignal(timeout, init.signal);
     return fetch(input, { ...init, signal })
@@ -163,7 +163,7 @@ export class AWClient {
                 ...params,
                 signal: this.controller.signal,
             },
-            this.timeout
+            this.timeout,
         ).then((res) => res.json() as Promise<T>);
     }
 
@@ -176,7 +176,7 @@ export class AWClient {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
             },
-            this.timeout
+            this.timeout,
         );
     }
 
@@ -187,7 +187,7 @@ export class AWClient {
                 method: "DELETE",
                 signal: this.controller.signal,
             },
-            this.timeout
+            this.timeout,
         );
     }
 
@@ -216,7 +216,7 @@ export class AWClient {
     public async ensureBucket(
         bucketId: string,
         type: string,
-        hostname: string
+        hostname: string,
     ): Promise<{ alreadyExist: boolean }> {
         return this._post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
@@ -236,7 +236,7 @@ export class AWClient {
     public async createBucket(
         bucketId: string,
         type: string,
-        hostname: string
+        hostname: string,
     ): Promise<void> {
         await this._post(`/0/buckets/${bucketId}`, {
             client: this.clientname,
@@ -251,7 +251,7 @@ export class AWClient {
 
     public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
         const rawBuckets = await this._get<{ [bucketId: string]: IBucketRaw }>(
-            "/0/buckets/"
+            "/0/buckets/",
         );
         const buckets: { [bucketId: string]: IBucket } = {};
         for (const bucketId of Object.keys(rawBuckets)) {
@@ -264,7 +264,7 @@ export class AWClient {
         const bucket = await this._get<IBucketRaw>(`/0/buckets/${bucketId}`);
         if (bucket.data === undefined) {
             console.warn(
-                "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message."
+                "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message.",
             );
             bucket.data = {};
         }
@@ -279,14 +279,14 @@ export class AWClient {
     /** Get a single event by ID */
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
         return this._get<IEventRaw>(
-            `/0/buckets/${bucketId}/events/${eventId}`
+            `/0/buckets/${bucketId}/events/${eventId}`,
         ).then(this.processRawEvent);
     }
 
     /** Get events, with optional date ranges and limit */
     public async getEvents(
         bucketId: string,
-        params: GetEventsOptions = {}
+        params: GetEventsOptions = {},
     ): Promise<IEvent[]> {
         const searchParams = new URLSearchParams();
         if (params.start) searchParams.set("start", params.start.toISOString());
@@ -294,7 +294,7 @@ export class AWClient {
         if (params.limit) searchParams.set("limit", params.limit.toString());
         const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
         return this._get<IEventRaw[]>(url).then((events) =>
-            events.map(this.processRawEvent)
+            events.map(this.processRawEvent),
         );
     }
 
@@ -302,7 +302,7 @@ export class AWClient {
     public async countEvents(
         bucketId: string,
         startTime?: Date,
-        endTime?: Date
+        endTime?: Date,
     ) {
         const params = new URLSearchParams();
         if (startTime) params.set("starttime", startTime.toISOString());
@@ -319,7 +319,7 @@ export class AWClient {
     /** Insert multiple events, requires the events to not have IDs assigned */
     public async insertEvents(
         bucketId: string,
-        events: IEvent[]
+        events: IEvent[],
     ): Promise<void> {
         // Check that events don't have IDs
         // To replace an event, use `replaceEvent`, which does the opposite check (requires ID)
@@ -339,7 +339,7 @@ export class AWClient {
     /** Replace multiple events, requires the events to have IDs assigned */
     public async replaceEvents(
         bucketId: string,
-        events: IEvent[]
+        events: IEvent[],
     ): Promise<void> {
         for (const event of events) {
             if (event.id === undefined) {
@@ -363,7 +363,7 @@ export class AWClient {
     public heartbeat(
         bucketId: string,
         pulsetime: number,
-        heartbeat: IEvent
+        heartbeat: IEvent,
     ): Promise<void> {
         // Create heartbeat queue for bucket if not already existing
         this.heartbeatQueues[bucketId] ??= {
@@ -399,7 +399,7 @@ export class AWClient {
             cacheEmpty?: boolean;
             verbose?: boolean;
             name?: string;
-        } = {}
+        } = {},
     ): Promise<any[]> {
         params.cache = params.cache ?? true;
         params.cacheEmpty = params.cacheEmpty ?? false;
@@ -416,7 +416,7 @@ export class AWClient {
             timeperiods: timeperiods.map((tp) =>
                 typeof tp !== "string"
                     ? `${tp.start.toISOString()}/${tp.end.toISOString()}`
-                    : tp
+                    : tp,
             ),
         };
 
@@ -448,14 +448,14 @@ export class AWClient {
             if (cacheResults.every((r) => r !== null)) {
                 if (params.verbose)
                     console.debug(
-                        `Returning fully cached query results for ${params.name}`
+                        `Returning fully cached query results for ${params.name}`,
                     );
                 return cacheResults;
             }
         }
 
         const timeperiodsNotCached = data.timeperiods.filter(
-            (_, i) => cacheResults[i] === null
+            (_, i) => cacheResults[i] === null,
         );
 
         // Otherwise, query with remaining timeperiods
@@ -472,14 +472,14 @@ export class AWClient {
         if (params.verbose) {
             if (cacheResults.every((r) => r === null)) {
                 console.debug(
-                    `Returning uncached query results for ${params.name}`
+                    `Returning uncached query results for ${params.name}`,
                 );
             } else if (
                 cacheResults.some((r) => r === null) &&
                 cacheResults.some((r) => r !== null)
             ) {
                 console.debug(
-                    `Returning partially cached query results for ${params.name}`
+                    `Returning partially cached query results for ${params.name}`,
                 );
             }
         }
@@ -509,12 +509,12 @@ export class AWClient {
     private async send_heartbeat(
         bucketId: string,
         pulsetime: number,
-        data: IEvent
+        data: IEvent,
     ): Promise<IEvent> {
         const url =
             "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
         const heartbeat = await this._post(url, data).then(
-            (res) => res.json() as Promise<any>
+            (res) => res.json() as Promise<any>,
         );
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
