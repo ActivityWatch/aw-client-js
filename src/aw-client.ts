@@ -6,7 +6,7 @@ export class FetchError extends Error {
     }
 }
 
-type EventData = { [k: string]: string | number };
+type EventData = { [k: string]: string | number | boolean };
 
 type JSONPrimitive = string | number | boolean | null;
 type JSONValue = JSONPrimitive | JSONObject | JSONArray;
