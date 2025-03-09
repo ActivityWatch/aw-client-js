@@ -305,8 +305,8 @@ export class AWClient {
         endTime?: Date,
     ) {
         const params = new URLSearchParams();
-        if (startTime) params.set("starttime", startTime.toISOString());
-        if (endTime) params.set("endtime", endTime.toISOString());
+        if (startTime) params.set("start", startTime.toISOString());
+        if (endTime) params.set("end", endTime.toISOString());
         const url = `/0/buckets/${bucketId}/events/count?${params.toString()}`;
         return this._get<number>(url);
     }
