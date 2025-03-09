@@ -18,13 +18,13 @@ jobs:
         aw-version: [0.12.3b15]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v1
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
     - name: Cache activitywatch binaries
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ./activitywatch
         key: ${{ runner.os }}-activitywatch-${{ matrix.aw-version }}
@@ -48,7 +48,7 @@ jobs:
         node-version: [18.x]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v1
       with:
