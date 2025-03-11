@@ -108,7 +108,10 @@ async function fetchWithFailure(
     init: RequestInit,
     timeout?: number,
 ): Promise<Response> {
-    const { signal, timeoutId } = makeTimeoutAbortSignal(timeout, init.signal);
+    const { signal, timeoutId } = makeTimeoutAbortSignal(
+        timeout,
+        init.signal || undefined,
+    );
     return fetch(input, { ...init, signal })
         .then((res) => {
             if (res.status >= 300) throw new FetchError(res);
