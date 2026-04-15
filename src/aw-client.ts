@@ -83,24 +83,27 @@ interface GetEventsOptions {
     limit?: number;
 }
 
-function makeTimeoutAbortSignal(
+function makeTimeoutSignal(
     timeout?: number,
     existingSignal?: AbortSignal,
-) {
-    if (timeout === undefined)
-        return { signal: existingSignal, timeoutId: undefined };
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(
-        () => abortController.abort(),
-        timeout || 10000,
-    );
-    // Sync with existing abort signal if it exists
-    if (existingSignal?.aborted) abortController.abort();
-    else
-        existingSignal?.addEventListener("abort", () =>
-            abortController.abort(),
-        );
-    return { signal: abortController.signal, timeoutId };
+): AbortSignal | undefined {
+    // Use AbortSignal.any() + AbortSignal.timeout() instead of manually wiring an
+    // "abort" event listener onto existingSignal.
+    //
+    // The previous approach created a new AbortController per request and attached a
+    // persistent listener to existingSignal (AWClient.controller.signal). That listener
+    // was never removed, so after days of use — aw-watcher-web fires a heartbeat every
+    // ~5 s — hundreds of thousands of AbortController instances accumulated, causing
+    // 5 GB+ RSS and 100% CPU in the Firefox extensions process.
+    // See: https://github.com/ActivityWatch/aw-watcher-web/issues/222
+    //
+    // AbortSignal.timeout() and AbortSignal.any() are supported in:
+    //   Chrome 116+, Firefox 115+, Safari 17.4+, Node.js 20.3+
+    if (timeout === undefined && existingSignal === undefined) return undefined;
+    const signals: AbortSignal[] = [];
+    if (timeout !== undefined) signals.push(AbortSignal.timeout(timeout));
+    if (existingSignal !== undefined) signals.push(existingSignal);
+    return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
 }
 
 async function fetchWithFailure(
@@ -108,16 +111,11 @@ async function fetchWithFailure(
     init: RequestInit,
     timeout?: number,
 ): Promise<Response> {
-    const { signal, timeoutId } = makeTimeoutAbortSignal(
-        timeout,
-        init.signal || undefined,
-    );
-    return fetch(input, { ...init, signal })
-        .then((res) => {
-            if (res.status >= 300) throw new FetchError(res);
-            return res;
-        })
-        .finally(() => clearTimeout(timeoutId));
+    const signal = makeTimeoutSignal(timeout, init.signal || undefined);
+    return fetch(input, { ...init, signal }).then((res) => {
+        if (res.status >= 300) throw new FetchError(res);
+        return res;
+    });
 }
 
 export class AWClient {
