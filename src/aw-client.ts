@@ -83,24 +83,64 @@ interface GetEventsOptions {
     limit?: number;
 }
 
-function makeTimeoutAbortSignal(
+type TimeoutSignalResult = {
+    signal?: AbortSignal;
+    cleanup: () => void;
+};
+
+function makeTimeoutSignal(
     timeout?: number,
     existingSignal?: AbortSignal,
-) {
-    if (timeout === undefined)
-        return { signal: existingSignal, timeoutId: undefined };
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(
-        () => abortController.abort(),
-        timeout || 10000,
-    );
-    // Sync with existing abort signal if it exists
-    if (existingSignal?.aborted) abortController.abort();
-    else
-        existingSignal?.addEventListener("abort", () =>
-            abortController.abort(),
-        );
-    return { signal: abortController.signal, timeoutId };
+): TimeoutSignalResult {
+    // Create a per-request AbortController and explicitly clean up both the timeout
+    // and the propagated abort listener when the request finishes.
+    //
+    // The old code leaked because it added an "abort" listener to the long-lived
+    // AWClient.controller.signal on every request but never removed it. In consumers
+    // like aw-watcher-web (heartbeat every ~5 s), that accumulated hundreds of
+    // thousands of AbortController instances over days of browsing.
+    // See: https://github.com/ActivityWatch/aw-watcher-web/issues/222
+    if (timeout === undefined && existingSignal === undefined) {
+        return { signal: undefined, cleanup: () => undefined };
+    }
+
+    const controller = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
+
+    const cleanup = () => {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+            timeoutId = undefined;
+        }
+        if (existingSignal !== undefined && abortListener !== undefined) {
+            existingSignal.removeEventListener("abort", abortListener);
+            abortListener = undefined;
+        }
+    };
+
+    if (timeout !== undefined) {
+        timeoutId = setTimeout(() => {
+            controller.abort();
+            cleanup();
+        }, timeout);
+    }
+
+    if (existingSignal !== undefined) {
+        if (existingSignal.aborted) {
+            controller.abort();
+            cleanup();
+            return { signal: controller.signal, cleanup };
+        }
+
+        abortListener = () => {
+            controller.abort();
+            cleanup();
+        };
+        existingSignal.addEventListener("abort", abortListener, { once: true });
+    }
+
+    return { signal: controller.signal, cleanup };
 }
 
 async function fetchWithFailure(
@@ -108,7 +148,7 @@ async function fetchWithFailure(
     init: RequestInit,
     timeout?: number,
 ): Promise<Response> {
-    const { signal, timeoutId } = makeTimeoutAbortSignal(
+    const { signal, cleanup } = makeTimeoutSignal(
         timeout,
         init.signal || undefined,
     );
@@ -117,7 +157,7 @@ async function fetchWithFailure(
             if (res.status >= 300) throw new FetchError(res);
             return res;
         })
-        .finally(() => clearTimeout(timeoutId));
+        .finally(cleanup);
 }
 
 export class AWClient {

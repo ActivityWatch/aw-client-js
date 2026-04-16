@@ -232,4 +232,65 @@ describe("API config behavior", () => {
         awc.abort();
         return caught;
     });
+
+    it("cleans up propagated abort listeners after a successful request", async () => {
+        const awc = new AWClient(clientName, {
+            testing: true,
+            timeout: 30_000,
+        });
+
+        const signal = awc.controller.signal;
+        const originalAddEventListener = signal.addEventListener.bind(signal);
+        const originalRemoveEventListener =
+            signal.removeEventListener.bind(signal);
+        const originalFetch = global.fetch;
+
+        let activeAbortListeners = 0;
+        let addCalls = 0;
+        let removeCalls = 0;
+
+        signal.addEventListener = ((
+            type: string,
+            listener: any,
+            options?: any,
+        ) => {
+            if (type === "abort" && listener !== null) {
+                activeAbortListeners += 1;
+                addCalls += 1;
+            }
+            originalAddEventListener(type, listener, options);
+        }) as typeof signal.addEventListener;
+
+        signal.removeEventListener = ((
+            type: string,
+            listener: any,
+            options?: any,
+        ) => {
+            if (type === "abort" && listener !== null) {
+                activeAbortListeners -= 1;
+                removeCalls += 1;
+            }
+            originalRemoveEventListener(type, listener, options);
+        }) as typeof signal.removeEventListener;
+
+        global.fetch = (() =>
+            Promise.resolve(
+                new Response(JSON.stringify({ testing: true }), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            )) as typeof fetch;
+
+        try {
+            const resp = await awc.getInfo();
+            assert.equal(resp.testing, true);
+            assert.equal(addCalls, 1);
+            assert.equal(removeCalls, 1);
+            assert.equal(activeAbortListeners, 0);
+        } finally {
+            signal.addEventListener = originalAddEventListener;
+            signal.removeEventListener = originalRemoveEventListener;
+            global.fetch = originalFetch;
+        }
+    });
 });
