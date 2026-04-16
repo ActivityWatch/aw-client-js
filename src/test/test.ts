@@ -241,7 +241,8 @@ describe("API config behavior", () => {
 
         const signal = awc.controller.signal;
         const originalAddEventListener = signal.addEventListener.bind(signal);
-        const originalRemoveEventListener = signal.removeEventListener.bind(signal);
+        const originalRemoveEventListener =
+            signal.removeEventListener.bind(signal);
         const originalFetch = global.fetch;
 
         let activeAbortListeners = 0;
