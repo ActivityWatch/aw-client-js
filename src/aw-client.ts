@@ -83,27 +83,64 @@ interface GetEventsOptions {
     limit?: number;
 }
 
+type TimeoutSignalResult = {
+    signal?: AbortSignal;
+    cleanup: () => void;
+};
+
 function makeTimeoutSignal(
     timeout?: number,
     existingSignal?: AbortSignal,
-): AbortSignal | undefined {
-    // Use AbortSignal.any() + AbortSignal.timeout() instead of manually wiring an
-    // "abort" event listener onto existingSignal.
+): TimeoutSignalResult {
+    // Create a per-request AbortController and explicitly clean up both the timeout
+    // and the propagated abort listener when the request finishes.
     //
-    // The previous approach created a new AbortController per request and attached a
-    // persistent listener to existingSignal (AWClient.controller.signal). That listener
-    // was never removed, so after days of use — aw-watcher-web fires a heartbeat every
-    // ~5 s — hundreds of thousands of AbortController instances accumulated, causing
-    // 5 GB+ RSS and 100% CPU in the Firefox extensions process.
+    // The old code leaked because it added an "abort" listener to the long-lived
+    // AWClient.controller.signal on every request but never removed it. In consumers
+    // like aw-watcher-web (heartbeat every ~5 s), that accumulated hundreds of
+    // thousands of AbortController instances over days of browsing.
     // See: https://github.com/ActivityWatch/aw-watcher-web/issues/222
-    //
-    // AbortSignal.timeout() and AbortSignal.any() are supported in:
-    //   Chrome 116+, Firefox 115+, Safari 17.4+, Node.js 20.3+
-    if (timeout === undefined && existingSignal === undefined) return undefined;
-    const signals: AbortSignal[] = [];
-    if (timeout !== undefined) signals.push(AbortSignal.timeout(timeout));
-    if (existingSignal !== undefined) signals.push(existingSignal);
-    return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+    if (timeout === undefined && existingSignal === undefined) {
+        return { signal: undefined, cleanup: () => undefined };
+    }
+
+    const controller = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
+
+    const cleanup = () => {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+            timeoutId = undefined;
+        }
+        if (existingSignal !== undefined && abortListener !== undefined) {
+            existingSignal.removeEventListener("abort", abortListener);
+            abortListener = undefined;
+        }
+    };
+
+    if (timeout !== undefined) {
+        timeoutId = setTimeout(() => {
+            controller.abort();
+            cleanup();
+        }, timeout);
+    }
+
+    if (existingSignal !== undefined) {
+        if (existingSignal.aborted) {
+            controller.abort();
+            cleanup();
+            return { signal: controller.signal, cleanup };
+        }
+
+        abortListener = () => {
+            controller.abort();
+            cleanup();
+        };
+        existingSignal.addEventListener("abort", abortListener, { once: true });
+    }
+
+    return { signal: controller.signal, cleanup };
 }
 
 async function fetchWithFailure(
@@ -111,11 +148,16 @@ async function fetchWithFailure(
     init: RequestInit,
     timeout?: number,
 ): Promise<Response> {
-    const signal = makeTimeoutSignal(timeout, init.signal || undefined);
-    return fetch(input, { ...init, signal }).then((res) => {
-        if (res.status >= 300) throw new FetchError(res);
-        return res;
-    });
+    const { signal, cleanup } = makeTimeoutSignal(
+        timeout,
+        init.signal || undefined,
+    );
+    return fetch(input, { ...init, signal })
+        .then((res) => {
+            if (res.status >= 300) throw new FetchError(res);
+            return res;
+        })
+        .finally(cleanup);
 }
 
 export class AWClient {
