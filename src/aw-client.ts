@@ -6,6 +6,22 @@ export class FetchError extends Error {
     }
 }
 
+function toISODateString(d: any): string {
+    if (typeof d === "string") {
+        return d;
+    }
+    if (d && typeof d.toISOString === "function") {
+        return d.toISOString();
+    }
+    if (d && typeof d.toDate === "function") {
+        return d.toDate().toISOString();
+    }
+    if (d) {
+        return new Date(d).toISOString();
+    }
+    return "";
+}
+
 type EventData = { [k: string]: string | number | boolean };
 
 type JSONPrimitive = string | number | boolean | null;
@@ -386,8 +402,8 @@ export class AWClient {
         params: GetEventsOptions = {},
     ): Promise<IEvent[]> {
         const searchParams = new URLSearchParams();
-        if (params.start) searchParams.set("start", params.start.toISOString());
-        if (params.end) searchParams.set("end", params.end.toISOString());
+        if (params.start) searchParams.set("start", toISODateString(params.start));
+        if (params.end) searchParams.set("end", toISODateString(params.end));
         if (params.limit !== undefined && params.limit !== null)
             searchParams.set("limit", params.limit.toString());
         const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
@@ -403,8 +419,8 @@ export class AWClient {
         endTime?: Date,
     ) {
         const params = new URLSearchParams();
-        if (startTime) params.set("start", startTime.toISOString());
-        if (endTime) params.set("end", endTime.toISOString());
+        if (startTime) params.set("start", toISODateString(startTime));
+        if (endTime) params.set("end", toISODateString(endTime));
         const url = `/0/buckets/${bucketId}/events/count?${params.toString()}`;
         return this._getStructured<number>(url);
     }
@@ -526,7 +542,7 @@ export class AWClient {
             query,
             timeperiods: timeperiods.map((tp) =>
                 typeof tp !== "string"
-                    ? `${tp.start.toISOString()}/${tp.end.toISOString()}`
+                    ? `${toISODateString(tp.start)}/${toISODateString(tp.end)}`
                     : tp,
             ),
         };
