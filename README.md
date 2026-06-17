@@ -38,6 +38,45 @@ const heartbeat = {timestamp: nowStr, duration: 0, data: { label: "just testing!
 client.heartbeat(bucketId, 5, heartbeat);
 ```
 
+## Persistent query cache
+
+`AWClient.query()` caches results per `{timeperiod, query}` so repeated queries
+are instant. By default this cache is in-memory only and is lost on page reload.
+
+In browsers you can opt in to persisting the cache to `localStorage` so completed
+(past) periods are reused across reloads:
+
+```javascript
+const client = new AWClient('my-client', {
+    baseURL: 'http://127.0.0.1:5600',
+    persistCache: true,          // opt-in; default false
+    // cacheStorage: window.localStorage,  // default when available
+    // maxCacheEntries: 1000,    // optional LRU cap
+});
+```
+
+Behavior and safety notes:
+
+- **Env-safe:** in Node / SSR / private-mode-throws environments, persistence
+  silently falls back to in-memory only. It never throws because storage is
+  missing.
+- **Namespaced:** persisted keys are prefixed with a schema version, the server
+  origin, and the client name, so switching aw-server instances never reads
+  another server's results.
+- **Never persists in-progress periods:** periods whose end is in the future are
+  never persisted (and never served from cache), keeping live data fresh.
+- **Quota handling:** on `localStorage` quota errors, the oldest entries are
+  evicted (LRU) and the write is retried; otherwise it degrades to in-memory.
+- **Storage size:** a year of multi-bucket category data can exceed
+  `localStorage`'s ~5 MB limit. For very large payloads consider an
+  IndexedDB-backed `cacheStorage` adapter implementing the same
+  `getItem`/`setItem`/`removeItem` interface.
+- **Stale past data:** completed periods are normally immutable, but a watcher
+  backfill or re-import can change historical data. Persisted results survive
+  reloads, so call `client.clearCache()` on force-reload and on hostname/server
+  change to invalidate both the in-memory and persisted layers. (Folding a
+  bucket `last_updated` signal into the cache key is a possible follow-up.)
+
 ## Contribute
 
 ### Setup your dev environment

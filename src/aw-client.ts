@@ -22,6 +22,195 @@ function toISODateString(d: any): string {
     return "";
 }
 
+// Bump when the persisted cache layout changes, to invalidate old entries.
+const CACHE_SCHEMA_VERSION = "v1";
+
+// `localStorage` and friends aren't in the es6 lib; declare them so we can
+// feature-detect with `typeof` without pulling in the whole DOM lib.
+declare const localStorage: CacheStorageAdapter | undefined;
+
+/** Returns true if the "start/end" timeperiod ends in the future. */
+function timeperiodSpansFuture(timeperiod: string): boolean {
+    const stop = new Date(timeperiod.split("/")[1]);
+    return new Date() < stop;
+}
+
+/** FNV-1a 32-bit hash, used to keep storage keys short and bounded. */
+function hashString(str: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16);
+}
+
+function isQuotaError(e: unknown): boolean {
+    if (!e || typeof e !== "object") return false;
+    const err = e as { name?: string; code?: number };
+    return (
+        err.name === "QuotaExceededError" ||
+        err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+        err.code === 22 ||
+        err.code === 1014
+    );
+}
+
+/**
+ * Returns `window.localStorage` if it exists and is writable, otherwise
+ * undefined. Never throws (private-mode/SSR/Node all return undefined).
+ */
+function getDefaultCacheStorage(): CacheStorageAdapter | undefined {
+    try {
+        if (typeof localStorage === "undefined" || !localStorage)
+            return undefined;
+        const probe = `awc:${CACHE_SCHEMA_VERSION}:__probe__`;
+        localStorage.setItem(probe, "1");
+        localStorage.removeItem(probe);
+        return localStorage;
+    } catch {
+        // Storage present but unusable (e.g. Safari private mode throws).
+        return undefined;
+    }
+}
+
+/**
+ * Persists query results to a storage adapter, namespaced per
+ * schema-version/server/client. Maintains its own LRU index so it never has to
+ * enumerate the underlying storage, and degrades gracefully (in-memory only)
+ * when writes fail.
+ */
+class PersistentQueryCache {
+    private storage: CacheStorageAdapter;
+    private prefix: string;
+    private indexKey: string;
+    private maxEntries?: number;
+    // Hashes of stored entries, oldest first (LRU order).
+    private index: string[];
+
+    constructor(
+        storage: CacheStorageAdapter,
+        namespace: string,
+        maxEntries?: number,
+    ) {
+        this.storage = storage;
+        this.prefix = namespace;
+        this.indexKey = `${namespace}index`;
+        this.maxEntries = maxEntries;
+        this.index = this.loadIndex();
+    }
+
+    private loadIndex(): string[] {
+        try {
+            const raw = this.storage.getItem(this.indexKey);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+
+    private saveIndex(): void {
+        this.storage.setItem(this.indexKey, JSON.stringify(this.index));
+    }
+
+    private entryKey(hash: string): string {
+        return `${this.prefix}e:${hash}`;
+    }
+
+    // Move a hash to the most-recently-used end of the index.
+    private touch(hash: string): void {
+        const i = this.index.indexOf(hash);
+        if (i !== -1) this.index.splice(i, 1);
+        this.index.push(hash);
+    }
+
+    // Drop the oldest entry (other than `exceptHash`); returns false if none.
+    private evictOldest(exceptHash?: string): boolean {
+        let idx = 0;
+        if (exceptHash !== undefined && this.index[idx] === exceptHash) idx = 1;
+        if (idx >= this.index.length) return false;
+        const hash = this.index.splice(idx, 1)[0];
+        try {
+            this.storage.removeItem(this.entryKey(hash));
+        } catch {
+            // ignore
+        }
+        return true;
+    }
+
+    get(cacheKey: string): object[] | undefined {
+        const hash = hashString(cacheKey);
+        let raw: string | null;
+        try {
+            raw = this.storage.getItem(this.entryKey(hash));
+        } catch {
+            return undefined;
+        }
+        if (!raw) return undefined;
+        try {
+            const entry = JSON.parse(raw) as { k: string; v: object[] };
+            if (entry.k !== cacheKey) return undefined; // hash collision
+            this.touch(hash);
+            try {
+                this.saveIndex();
+            } catch {
+                // LRU ordering is best-effort; ignore failures on read.
+            }
+            return entry.v;
+        } catch {
+            return undefined;
+        }
+    }
+
+    set(cacheKey: string, value: object[]): void {
+        const hash = hashString(cacheKey);
+        const payload = JSON.stringify({ k: cacheKey, v: value });
+
+        // Enforce the LRU cap before writing a new entry.
+        if (this.maxEntries !== undefined) {
+            while (
+                this.index.length >= this.maxEntries &&
+                this.index.indexOf(hash) === -1 &&
+                this.evictOldest(hash)
+            ) {
+                // keep evicting until under cap
+            }
+        }
+
+        for (;;) {
+            try {
+                this.storage.setItem(this.entryKey(hash), payload);
+                this.touch(hash);
+                this.saveIndex();
+                return;
+            } catch (e) {
+                // On quota errors, evict the oldest entry and retry; otherwise
+                // give up and rely on the in-memory cache.
+                if (isQuotaError(e) && this.evictOldest(hash)) continue;
+                return;
+            }
+        }
+    }
+
+    clear(): void {
+        for (const hash of this.index) {
+            try {
+                this.storage.removeItem(this.entryKey(hash));
+            } catch {
+                // ignore
+            }
+        }
+        this.index = [];
+        try {
+            this.storage.removeItem(this.indexKey);
+        } catch {
+            // ignore
+        }
+    }
+}
+
 type EventData = { [k: string]: string | number | boolean };
 
 type JSONPrimitive = string | number | boolean | null;
@@ -52,12 +241,33 @@ export interface IAppEditorEvent extends IEvent {
     };
 }
 
+/**
+ * Minimal storage interface used to persist the query cache.
+ * `window.localStorage` satisfies this, as can a custom (e.g. IndexedDB-backed)
+ * adapter for larger payloads.
+ */
+export interface CacheStorageAdapter {
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+    removeItem(key: string): void;
+}
+
 export interface AWReqOptions {
     controller?: AbortController;
     testing?: boolean;
     baseURL?: string;
     timeout?: number;
     token?: string;
+    /** Persist the query cache across reloads (browser only). Default: false. */
+    persistCache?: boolean;
+    /**
+     * Storage backend for the persisted cache.
+     * Defaults to `window.localStorage` when available; ignored unless
+     * `persistCache` is enabled.
+     */
+    cacheStorage?: CacheStorageAdapter;
+    /** Optional LRU cap on the number of persisted cache entries. */
+    maxCacheEntries?: number;
 }
 
 interface IBucketRaw {
@@ -188,6 +398,7 @@ export class AWClient {
     public controller: AbortController;
 
     private queryCache: { [cacheKey: string]: object[] };
+    private persistentCache?: PersistentQueryCache;
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -211,9 +422,29 @@ export class AWClient {
         this.apiURL = this.baseURL + "/api";
         this.controller = options.controller || new AbortController();
 
-        // Cache for queries, by timeperiod
-        // TODO: persist cache and add cache expiry/invalidation
+        // In-memory cache for queries, by {timeperiod, query}.
         this.queryCache = {};
+
+        // Optional persistent layer (browser localStorage by default).
+        if (options.persistCache) {
+            const storage = options.cacheStorage ?? getDefaultCacheStorage();
+            if (storage) {
+                // Namespace by schema version, server origin and client name so
+                // switching servers never reads another server's results.
+                const namespace = `awc:${CACHE_SCHEMA_VERSION}:${this.baseURL}:${this.clientname}:`;
+                this.persistentCache = new PersistentQueryCache(
+                    storage,
+                    namespace,
+                    options.maxCacheEntries,
+                );
+            }
+        }
+    }
+
+    /** Clears both the in-memory and (if enabled) persisted query caches. */
+    public clearCache(): void {
+        this.queryCache = {};
+        this.persistentCache?.clear();
     }
 
     private _authHeaders(): Record<string, string> {
@@ -360,7 +591,8 @@ export class AWClient {
         params: GetEventsOptions = {},
     ): Promise<IEvent[]> {
         const searchParams = new URLSearchParams();
-        if (params.start) searchParams.set("start", toISODateString(params.start));
+        if (params.start)
+            searchParams.set("start", toISODateString(params.start));
         if (params.end) searchParams.set("end", toISODateString(params.end));
         if (params.limit) searchParams.set("limit", params.limit.toString());
         const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
@@ -495,21 +727,24 @@ export class AWClient {
         if (params.cache) {
             // Check cache for each {timeperiod, query} pair
             for (const timeperiod of data.timeperiods) {
-                // check if timeperiod spans the future
-                const stop = new Date(timeperiod.split("/")[1]);
-                const now = new Date();
-                if (now < stop) {
+                // never serve in-progress periods from cache
+                if (timeperiodSpansFuture(timeperiod)) {
                     cacheResults.push(null);
                     continue;
                 }
 
-                // check cache
+                // check in-memory cache, falling back to the persisted layer
                 const cacheKey = JSON.stringify({ timeperiod, query });
-                if (
-                    this.queryCache[cacheKey] &&
-                    (params.cacheEmpty || !isEmpty(this.queryCache[cacheKey]))
-                ) {
-                    cacheResults.push(this.queryCache[cacheKey]);
+                let cached = this.queryCache[cacheKey];
+                if (cached === undefined && this.persistentCache) {
+                    const persisted = this.persistentCache.get(cacheKey);
+                    if (persisted !== undefined) {
+                        cached = persisted;
+                        this.queryCache[cacheKey] = persisted;
+                    }
+                }
+                if (cached && (params.cacheEmpty || !isEmpty(cached))) {
+                    cacheResults.push(cached);
                 } else {
                     cacheResults.push(null);
                 }
@@ -556,15 +791,17 @@ export class AWClient {
         }
 
         // Cache results
-        // NOTE: this also caches timeperiods that span the future,
+        // NOTE: this also caches timeperiods that span the future in-memory,
         //       but this is ok since we check that when first checking the cache,
         //       and makes it easier to return all results from cache.
+        //       In-progress periods are never written to the persistent layer.
         for (const [i, result] of queryResults.entries()) {
-            const cacheKey = JSON.stringify({
-                timeperiod: timeperiodsNotCached[i],
-                query,
-            });
+            const timeperiod = timeperiodsNotCached[i];
+            const cacheKey = JSON.stringify({ timeperiod, query });
             this.queryCache[cacheKey] = result;
+            if (this.persistentCache && !timeperiodSpansFuture(timeperiod)) {
+                this.persistentCache.set(cacheKey, result);
+            }
         }
 
         // Return all results from cache
