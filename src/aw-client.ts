@@ -41,6 +41,7 @@ export interface AWReqOptions {
     testing?: boolean;
     baseURL?: string;
     timeout?: number;
+    token?: string;
 }
 
 interface IBucketRaw {
@@ -166,6 +167,7 @@ export class AWClient {
     public apiURL: string;
     public timeout: number;
     public testing: boolean;
+    public token: string | undefined;
 
     public controller: AbortController;
 
@@ -181,6 +183,7 @@ export class AWClient {
         this.clientname = clientname;
         this.testing = options.testing ?? false;
         this.timeout = options.timeout ?? 30000;
+        this.token = options.token;
         if (typeof options.baseURL === "undefined") {
             const port = !options.testing ? 5600 : 5666;
             // Note: had to switch to 127.0.0.1 over localhost as otherwise there's
@@ -197,6 +200,10 @@ export class AWClient {
         this.queryCache = {};
     }
 
+    private _authHeaders(): Record<string, string> {
+        return this.token ? { Authorization: `Bearer ${this.token}` } : {};
+    }
+
     /// Fetching logic
     /** Makes a GET request, assuming the response is JSON and parsing it */
     private async _get<T>(endpoint: string, params: RequestInit = {}) {
@@ -204,6 +211,7 @@ export class AWClient {
             `${this.apiURL}${endpoint}`,
             {
                 ...params,
+                headers: { ...this._authHeaders(), ...(params.headers ?? {}) },
                 signal: this.controller.signal,
             },
             this.timeout,
@@ -216,7 +224,10 @@ export class AWClient {
             {
                 method: "POST",
                 signal: this.controller.signal,
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...this._authHeaders(),
+                },
                 body: JSON.stringify(data),
             },
             this.timeout,
@@ -229,6 +240,7 @@ export class AWClient {
             {
                 method: "DELETE",
                 signal: this.controller.signal,
+                headers: { ...this._authHeaders() },
             },
             this.timeout,
         );
