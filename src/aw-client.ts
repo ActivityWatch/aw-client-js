@@ -231,9 +231,21 @@ export class AWClient {
                 signal: this.controller.signal,
             },
             this.timeout,
-        )
-            .then((res) => res.json())
-            .then((data) => normalizeJsonResponse<T>(data, endpoint));
+        ).then((res) => res.json() as Promise<T>);
+    }
+
+    /**
+     * Like {@link _get}, but also normalizes a double-encoded (string) JSON
+     * response. Only safe for endpoints that always return an array/object —
+     * NOT for endpoints like settings that may legitimately return a string.
+     */
+    private async _getStructured<T>(
+        endpoint: string,
+        params: RequestInit = {},
+    ) {
+        return this._get<unknown>(endpoint, params).then((data) =>
+            normalizeJsonResponse<T>(data, endpoint),
+        );
     }
 
     private async _post(endpoint: string, data: Record<string, any>) {
@@ -366,7 +378,7 @@ export class AWClient {
         if (params.end) searchParams.set("end", params.end.toISOString());
         if (params.limit) searchParams.set("limit", params.limit.toString());
         const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
-        return this._get<IEventRaw[]>(url).then((events) =>
+        return this._getStructured<IEventRaw[]>(url).then((events) =>
             events.map(this.processRawEvent),
         );
     }
