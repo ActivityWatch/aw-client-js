@@ -612,3 +612,5 @@ export class AWClient {
         await this._post("/0/settings/" + key, value);
     }
 }
+
+export { HeartbeatBuffer } from "./heartbeat-buffer";

@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import { FetchError } from "../aw-client";
-import { AWClient, IEvent } from "../aw-client";
+import { AWClient, HeartbeatBuffer, IEvent } from "../aw-client";
 
 function isFetchError(error: unknown): error is FetchError {
     return error instanceof FetchError;
@@ -84,6 +84,52 @@ describe("Basic API usage", () => {
         // Check that we only have one event
         const events_after = await awc.getEvents(bucketId, { limit: 1 });
         assert.equal(events_after.length, 1);
+    });
+
+    it("pre-merging preserves the server's heartbeat result", async () => {
+        await awc.deleteBucket(bucketId);
+        await awc.ensureBucket(bucketId, eventType, hostname);
+        const events = [
+            {
+                timestamp: new Date("2026-10-02T09:00:00Z"),
+                duration: 2,
+                data: { label: "same" },
+            },
+            {
+                timestamp: new Date("2026-10-02T09:00:02Z"),
+                duration: 0,
+                data: { label: "same" },
+            },
+            {
+                timestamp: new Date("2026-10-02T09:00:07Z"),
+                duration: 0,
+                data: { label: "same" },
+            },
+            {
+                timestamp: new Date("2026-10-02T09:00:13Z"),
+                duration: 0,
+                data: { label: "changed" },
+            },
+            {
+                timestamp: new Date("2026-10-02T09:00:14Z"),
+                duration: 1,
+                data: { label: "changed" },
+            },
+        ];
+        for (const event of events) await awc.heartbeat(bucketId, 5, event);
+        const normalize = (items: IEvent[]) =>
+            items.map(({ timestamp, duration, data }) => ({
+                timestamp,
+                duration,
+                data,
+            }));
+        const direct = normalize(await awc.getEvents(bucketId));
+        await awc.deleteBucket(bucketId);
+        await awc.ensureBucket(bucketId, eventType, hostname);
+        const buffer = new HeartbeatBuffer(awc, bucketId, 5);
+        for (const event of events) buffer.heartbeat(event);
+        await buffer.flush();
+        assert.deepEqual(normalize(await awc.getEvents(bucketId)), direct);
     });
 
     it("Checks for presence/absence of event IDs for insert/replace", async () => {
