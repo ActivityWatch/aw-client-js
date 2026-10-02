@@ -236,8 +236,9 @@ export class AWClient {
 
     /**
      * Like {@link _get}, but also normalizes a double-encoded (string) JSON
-     * response. Only safe for endpoints that always return an array/object —
-     * NOT for endpoints like settings that may legitimately return a string.
+     * response. Only safe for endpoints that never legitimately return a bare
+     * string (arrays, objects, numbers) — NOT for endpoints like settings that
+     * may legitimately return a string.
      */
     private async _getStructured<T>(
         endpoint: string,
@@ -277,7 +278,7 @@ export class AWClient {
     }
 
     public async getInfo(): Promise<IInfo> {
-        return this._get<IInfo>("/0/info");
+        return this._getStructured<IInfo>("/0/info");
     }
 
     public async abort(msg?: string) {
@@ -335,9 +336,9 @@ export class AWClient {
     }
 
     public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
-        const rawBuckets = await this._get<{ [bucketId: string]: IBucketRaw }>(
-            "/0/buckets/",
-        );
+        const rawBuckets = await this._getStructured<{
+            [bucketId: string]: IBucketRaw;
+        }>("/0/buckets/");
         const buckets: { [bucketId: string]: IBucket } = {};
         for (const bucketId of Object.keys(rawBuckets)) {
             buckets[bucketId] = this.processRawBucket(rawBuckets[bucketId]);
@@ -346,7 +347,9 @@ export class AWClient {
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        const bucket = await this._get<IBucketRaw>(`/0/buckets/${bucketId}`);
+        const bucket = await this._getStructured<IBucketRaw>(
+            `/0/buckets/${bucketId}`,
+        );
         if (bucket.data === undefined) {
             console.warn(
                 "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message.",
@@ -363,7 +366,7 @@ export class AWClient {
 
     /** Get a single event by ID */
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
-        return this._get<IEventRaw>(
+        return this._getStructured<IEventRaw>(
             `/0/buckets/${bucketId}/events/${eventId}`,
         ).then(this.processRawEvent);
     }
@@ -393,7 +396,7 @@ export class AWClient {
         if (startTime) params.set("start", startTime.toISOString());
         if (endTime) params.set("end", endTime.toISOString());
         const url = `/0/buckets/${bucketId}/events/count?${params.toString()}`;
-        return this._get<number>(url);
+        return this._getStructured<number>(url);
     }
 
     /** Insert a single event, requires the event to not have an ID assigned */

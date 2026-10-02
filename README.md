@@ -31,7 +31,7 @@ client.getBuckets().then(console.log);
 // Create bucket, send a heartbeat, then read it back once both writes finish
 const bucketId = "test";
 client
-    .createBucket(bucketId, "bucket-type", "your-hostname")
+    .ensureBucket(bucketId, "bucket-type", "your-hostname")
     .then(() => {
         const nowStr = new Date().toISOString();
         const heartbeat = {
