@@ -161,6 +161,22 @@ async function fetchWithFailure(
         .finally(cleanup);
 }
 
+// Some servers (observed with aw-server and aw-server-rust, Firefox only) have
+// returned a JSON-encoded string instead of the expected array/object despite a
+// correct content-type, which then crashes callers with an opaque
+// `TypeError: n.forEach is not a function`. Re-parse the string and fail with a
+// message that names the endpoint instead. See: ActivityWatch/aw-client-js#45
+function normalizeJsonResponse<T>(data: unknown, endpoint: string): T {
+    if (typeof data !== "string") return data as T;
+    try {
+        return JSON.parse(data) as T;
+    } catch {
+        throw new Error(
+            `Received invalid JSON from ${endpoint}: ${data.slice(0, 200)}`,
+        );
+    }
+}
+
 export class AWClient {
     public clientname: string;
     public baseURL: string;
@@ -215,7 +231,9 @@ export class AWClient {
                 signal: this.controller.signal,
             },
             this.timeout,
-        ).then((res) => res.json() as Promise<T>);
+        )
+            .then((res) => res.json())
+            .then((data) => normalizeJsonResponse<T>(data, endpoint));
     }
 
     private async _post(endpoint: string, data: Record<string, any>) {
@@ -519,7 +537,9 @@ export class AWClient {
                 ? await this._post("/0/query/", {
                       ...data,
                       timeperiods: timeperiodsNotCached,
-                  }).then((res) => res.json() as Promise<any[]>)
+                  })
+                      .then((res) => res.json())
+                      .then((d) => normalizeJsonResponse<any[]>(d, "/0/query/"))
                 : [];
 
         if (!params.cache) return queryResults;

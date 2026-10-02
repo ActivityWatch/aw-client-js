@@ -36,6 +36,19 @@ client.createBucket(bucketId, "bucket-type", "your-hostname");
 const nowStr = (new Date()).toISOString();
 const heartbeat = {timestamp: nowStr, duration: 0, data: { label: "just testing!" }};
 client.heartbeat(bucketId, 5, heartbeat);
+
+// Get events in a bucket, optionally bounded by time range and/or limited in count
+const end = new Date();
+const start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // last 24 hours
+client.getEvents(bucketId, { start, end, limit: 100 }).then(console.log);
+
+// Run a query over one or more timeperiods
+const timeperiods = [{ start, end }];
+const query = [
+  `events = query_bucket("${bucketId}");`,
+  "RETURN = events;",
+];
+client.query(timeperiods, query).then(console.log);
 ```
 
 ## Contribute

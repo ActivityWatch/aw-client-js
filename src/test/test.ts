@@ -294,3 +294,56 @@ describe("API config behavior", () => {
         }
     });
 });
+
+describe("String response handling (#45)", () => {
+    const awc = new AWClient(clientName, { testing: true });
+    const originalFetch = global.fetch;
+
+    function mockJsonResponse(body: unknown) {
+        global.fetch = (() =>
+            Promise.resolve(
+                new Response(JSON.stringify(body), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            )) as typeof fetch;
+    }
+
+    afterEach(() => {
+        global.fetch = originalFetch;
+    });
+
+    it("getEvents parses a double-encoded (string) JSON array", async () => {
+        const events = [
+            { id: 1, timestamp: new Date().toISOString(), data: {} },
+        ];
+        // Simulate a server that returns the array JSON-encoded a second time,
+        // i.e. the body is the *string* '[{"id":1,...}]' rather than the array.
+        mockJsonResponse(JSON.stringify(events));
+        const resp = await awc.getEvents(bucketId, { limit: 1 });
+        assert.equal(resp.length, 1);
+        assert.equal(resp[0].id, 1);
+    });
+
+    it("getEvents throws a descriptive error on truly invalid JSON string", async () => {
+        mockJsonResponse("not valid json at all {broken");
+        await assert.rejects(
+            () => awc.getEvents(bucketId, { limit: 1 }),
+            (err: Error) => {
+                assert.match(err.message, /Received invalid JSON from/);
+                assert.match(err.message, /not valid json at all/);
+                return true;
+            },
+        );
+    });
+
+    it("query parses a double-encoded (string) JSON array", async () => {
+        const results = [[{ id: 1, data: {} }]];
+        mockJsonResponse(JSON.stringify(results));
+        const resp = await awc.query(
+            [{ start: new Date(0), end: new Date(1) }],
+            ["events = query_bucket('x');"],
+        );
+        assert.deepEqual(resp, results);
+    });
+});
