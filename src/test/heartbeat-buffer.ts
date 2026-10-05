@@ -128,7 +128,9 @@ describe("Heartbeat pre-merging", () => {
             return new Response("{}", { status: 200 });
         }) as unknown as typeof fetch;
         const buffer = new HeartbeatBuffer(client, "test", 5, {
-            onError: () => {},
+            onError: () => {
+                // intentionally empty: this test checks flush ordering, not error handling
+            },
         });
         buffer.heartbeat(sample(0));
         buffer.heartbeat(sample(10)); // different data → sends sample(0) → A
