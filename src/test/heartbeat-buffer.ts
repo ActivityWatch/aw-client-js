@@ -139,9 +139,14 @@ describe("Heartbeat pre-merging", () => {
         await new Promise((r) => setTimeout(r, 0));
         // flush() must still be pending — it must be waiting for B.
         let flushed = false;
-        flushPromise.finally(() => {
-            flushed = true;
-        });
+        flushPromise.then(
+            () => {
+                flushed = true;
+            },
+            () => {
+                flushed = true;
+            },
+        );
         await Promise.resolve();
         assert.equal(
             flushed,
