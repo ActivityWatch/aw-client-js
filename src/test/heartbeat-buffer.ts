@@ -111,6 +111,45 @@ describe("Heartbeat pre-merging", () => {
         assert.deepEqual(errors, [failure]);
     });
 
+    it("flush waits for all outstanding sends before rejecting", async () => {
+        // Regression for Promise.all: if request A fails before request B
+        // completes, Promise.all rejects immediately while B is still running.
+        // Promise.allSettled waits for both before the caller sees the failure.
+        let releaseB!: () => void;
+        let callCount = 0;
+        const failure = new Error("offline");
+        global.fetch = (async () => {
+            const n = ++callCount;
+            if (n === 1) throw failure; // request A: fails immediately
+            // request B: blocks until released
+            await new Promise<void>((r) => {
+                releaseB = r;
+            });
+            return new Response("{}", { status: 200 });
+        }) as unknown as typeof fetch;
+        const buffer = new HeartbeatBuffer(client, "test", 5, {
+            onError: () => {},
+        });
+        buffer.heartbeat(sample(0));
+        buffer.heartbeat(sample(10)); // different data → sends sample(0) → A
+        const flushPromise = buffer.flush(); // sends sample(10) → B (blocks)
+        // Let microtasks run: A rejects, B starts but blocks.
+        await new Promise((r) => setTimeout(r, 0));
+        // flush() must still be pending — it must be waiting for B.
+        let flushed = false;
+        flushPromise.finally(() => {
+            flushed = true;
+        });
+        await Promise.resolve();
+        assert.equal(
+            flushed,
+            false,
+            "flush() must not settle while B is still in-flight",
+        );
+        releaseB();
+        await assert.rejects(flushPromise, (error) => error === failure);
+    });
+
     it("reports background timer failures without an unhandled rejection", async () => {
         const failure = new Error("offline");
         global.fetch = async () => {

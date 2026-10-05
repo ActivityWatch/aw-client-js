@@ -70,7 +70,11 @@ export class HeartbeatBuffer {
     /** Send pending data and wait for all currently outstanding sends. */
     public async flush(): Promise<void> {
         this.sendPending();
-        await Promise.all(this.inFlight);
+        const settled = await Promise.allSettled([...this.inFlight]);
+        const first = settled.find(
+            (r): r is PromiseRejectedResult => r.status === "rejected",
+        );
+        if (first) throw first.reason;
     }
 
     private sendPending(): void {
