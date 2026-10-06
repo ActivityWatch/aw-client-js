@@ -161,6 +161,22 @@ async function fetchWithFailure(
         .finally(cleanup);
 }
 
+// Some servers (observed with aw-server and aw-server-rust, Firefox only) have
+// returned a JSON-encoded string instead of the expected array/object despite a
+// correct content-type, which then crashes callers with an opaque
+// `TypeError: n.forEach is not a function`. Re-parse the string and fail with a
+// message that names the endpoint instead. See: ActivityWatch/aw-client-js#45
+function normalizeJsonResponse<T>(data: unknown, endpoint: string): T {
+    if (typeof data !== "string") return data as T;
+    try {
+        return JSON.parse(data) as T;
+    } catch {
+        throw new Error(
+            `Received invalid JSON from ${endpoint}: ${data.slice(0, 200)}`,
+        );
+    }
+}
+
 export class AWClient {
     public clientname: string;
     public baseURL: string;
@@ -218,6 +234,21 @@ export class AWClient {
         ).then((res) => res.json() as Promise<T>);
     }
 
+    /**
+     * Like {@link _get}, but also normalizes a double-encoded (string) JSON
+     * response. Only safe for endpoints that never legitimately return a bare
+     * string (arrays, objects, numbers) — NOT for endpoints like settings that
+     * may legitimately return a string.
+     */
+    private async _getStructured<T>(
+        endpoint: string,
+        params: RequestInit = {},
+    ) {
+        return this._get<unknown>(endpoint, params).then((data) =>
+            normalizeJsonResponse<T>(data, endpoint),
+        );
+    }
+
     private async _post(endpoint: string, data: Record<string, any>) {
         return fetchWithFailure(
             `${this.apiURL}${endpoint}`,
@@ -247,7 +278,7 @@ export class AWClient {
     }
 
     public async getInfo(): Promise<IInfo> {
-        return this._get<IInfo>("/0/info");
+        return this._getStructured<IInfo>("/0/info");
     }
 
     public async abort(msg?: string) {
@@ -305,9 +336,9 @@ export class AWClient {
     }
 
     public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
-        const rawBuckets = await this._get<{ [bucketId: string]: IBucketRaw }>(
-            "/0/buckets/",
-        );
+        const rawBuckets = await this._getStructured<{
+            [bucketId: string]: IBucketRaw;
+        }>("/0/buckets/");
         const buckets: { [bucketId: string]: IBucket } = {};
         for (const bucketId of Object.keys(rawBuckets)) {
             buckets[bucketId] = this.processRawBucket(rawBuckets[bucketId]);
@@ -316,7 +347,9 @@ export class AWClient {
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
-        const bucket = await this._get<IBucketRaw>(`/0/buckets/${bucketId}`);
+        const bucket = await this._getStructured<IBucketRaw>(
+            `/0/buckets/${bucketId}`,
+        );
         if (bucket.data === undefined) {
             console.warn(
                 "Received bucket had undefined data, likely due to data field unsupported by server. Try updating your ActivityWatch server to get rid of this message.",
@@ -333,7 +366,7 @@ export class AWClient {
 
     /** Get a single event by ID */
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
-        return this._get<IEventRaw>(
+        return this._getStructured<IEventRaw>(
             `/0/buckets/${bucketId}/events/${eventId}`,
         ).then(this.processRawEvent);
     }
@@ -348,7 +381,7 @@ export class AWClient {
         if (params.end) searchParams.set("end", params.end.toISOString());
         if (params.limit) searchParams.set("limit", params.limit.toString());
         const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
-        return this._get<IEventRaw[]>(url).then((events) =>
+        return this._getStructured<IEventRaw[]>(url).then((events) =>
             events.map(this.processRawEvent),
         );
     }
@@ -363,7 +396,7 @@ export class AWClient {
         if (startTime) params.set("start", startTime.toISOString());
         if (endTime) params.set("end", endTime.toISOString());
         const url = `/0/buckets/${bucketId}/events/count?${params.toString()}`;
-        return this._get<number>(url);
+        return this._getStructured<number>(url);
     }
 
     /** Insert a single event, requires the event to not have an ID assigned */
@@ -519,7 +552,9 @@ export class AWClient {
                 ? await this._post("/0/query/", {
                       ...data,
                       timeperiods: timeperiodsNotCached,
-                  }).then((res) => res.json() as Promise<any[]>)
+                  })
+                      .then((res) => res.json())
+                      .then((d) => normalizeJsonResponse<any[]>(d, "/0/query/"))
                 : [];
 
         if (!params.cache) return queryResults;

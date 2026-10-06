@@ -294,3 +294,121 @@ describe("API config behavior", () => {
         }
     });
 });
+
+describe("String response handling (#45)", () => {
+    const awc = new AWClient(clientName, { testing: true });
+    const originalFetch = global.fetch;
+
+    function mockJsonResponse(body: unknown) {
+        global.fetch = (() =>
+            Promise.resolve(
+                new Response(JSON.stringify(body), {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            )) as typeof fetch;
+    }
+
+    afterEach(() => {
+        global.fetch = originalFetch;
+    });
+
+    it("getEvents parses a double-encoded (string) JSON array", async () => {
+        const events = [
+            { id: 1, timestamp: new Date().toISOString(), data: {} },
+        ];
+        // Simulate a server that returns the array JSON-encoded a second time,
+        // i.e. the body is the *string* '[{"id":1,...}]' rather than the array.
+        mockJsonResponse(JSON.stringify(events));
+        const resp = await awc.getEvents(bucketId, { limit: 1 });
+        assert.equal(resp.length, 1);
+        assert.equal(resp[0].id, 1);
+    });
+
+    it("getEvents throws a descriptive error on truly invalid JSON string", async () => {
+        mockJsonResponse("not valid json at all {broken");
+        await assert.rejects(
+            () => awc.getEvents(bucketId, { limit: 1 }),
+            (err: Error) => {
+                assert.match(err.message, /Received invalid JSON from/);
+                assert.match(err.message, /not valid json at all/);
+                return true;
+            },
+        );
+    });
+
+    it("query parses a double-encoded (string) JSON array", async () => {
+        const results = [[{ id: 1, data: {} }]];
+        mockJsonResponse(JSON.stringify(results));
+        const resp = await awc.query(
+            [{ start: new Date(0), end: new Date(1) }],
+            ["events = query_bucket('x');"],
+        );
+        assert.deepEqual(resp, results);
+    });
+
+    it("getInfo parses a double-encoded (string) JSON object", async () => {
+        const info = { testing: true, version: "0.0.0" };
+        mockJsonResponse(JSON.stringify(info));
+        const resp = await awc.getInfo();
+        assert.deepEqual(resp, info);
+    });
+
+    it("getBuckets parses a double-encoded (string) JSON object", async () => {
+        const raw = {
+            [bucketId]: {
+                id: bucketId,
+                created: new Date(0).toISOString(),
+                type: eventType,
+                hostname,
+                data: {},
+            },
+        };
+        mockJsonResponse(JSON.stringify(raw));
+        const resp = await awc.getBuckets();
+        assert.ok(resp[bucketId]);
+        assert.ok(resp[bucketId].created instanceof Date);
+    });
+
+    it("getBucketInfo parses a double-encoded (string) JSON object", async () => {
+        const raw = {
+            id: bucketId,
+            created: new Date(0).toISOString(),
+            type: eventType,
+            hostname,
+            data: {},
+        };
+        mockJsonResponse(JSON.stringify(raw));
+        const resp = await awc.getBucketInfo(bucketId);
+        assert.equal(resp.id, bucketId);
+        assert.ok(resp.created instanceof Date);
+    });
+
+    it("getEvent parses a double-encoded (string) JSON object", async () => {
+        const raw = {
+            id: 1,
+            timestamp: new Date(0).toISOString(),
+            data: {},
+        };
+        mockJsonResponse(JSON.stringify(raw));
+        const resp = await awc.getEvent(bucketId, 1);
+        assert.equal(resp.id, 1);
+        assert.ok(resp.timestamp instanceof Date);
+    });
+
+    it("countEvents parses a double-encoded (string) number", async () => {
+        mockJsonResponse(JSON.stringify(42));
+        const resp = await awc.countEvents(bucketId);
+        assert.strictEqual(resp, 42);
+    });
+
+    it("get_setting still returns a bare JSON string", async () => {
+        // Regression guard: string-valued settings must NOT be re-parsed by the
+        // structured normalizer (Greptile round 1, commit 49d353a).
+        // The response body is the JSON text '"hello"', so res.json() yields
+        // the bare string "hello".
+        mockJsonResponse("hello");
+        const resp = await awc.get_setting("some-key");
+        assert.strictEqual(resp, "hello");
+    });
+});
