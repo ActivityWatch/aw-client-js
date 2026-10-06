@@ -221,6 +221,98 @@ describe("Basic API usage", () => {
     });
 });
 
+describe("Persistent query cache", () => {
+    const persistClientName = "aw-client-js-unittest-persist";
+
+    // Minimal in-memory localStorage-like adapter for tests.
+    function makeStorage() {
+        const store: { [k: string]: string } = {};
+        return {
+            store,
+            getItem: (k: string) => (k in store ? store[k] : null),
+            setItem: (k: string, v: string) => {
+                store[k] = v;
+            },
+            removeItem: (k: string) => {
+                delete store[k];
+            },
+        };
+    }
+
+    const query = [`bucket="${bucketId}";`, "RETURN=query_bucket(bucket);"];
+
+    before("Ensure test bucket exists", () =>
+        new AWClient(persistClientName, { testing: true }).ensureBucket(
+            bucketId,
+            eventType,
+            hostname,
+        ),
+    );
+
+    it("persists past results across instances and clears them", async () => {
+        const storage = makeStorage();
+        const start = new Date("2021-01-01");
+        const end = new Date("2021-01-02");
+        const timeperiods = [{ start, end }];
+
+        const awc1 = new AWClient(persistClientName, {
+            testing: true,
+            persistCache: true,
+            cacheStorage: storage,
+        });
+        await awc1.ensureBucket(bucketId, eventType, hostname);
+        await awc1.heartbeat(bucketId, 5, {
+            ...testevent,
+            timestamp: new Date("2021-01-01T00:00:00Z"),
+        });
+
+        const resp1: IEvent[][] = await awc1.query(timeperiods, query);
+        assert.equal(1, resp1[0].length);
+
+        // Results for the past period were written to the storage adapter.
+        assert.ok(Object.keys(storage.store).length > 0);
+
+        // A fresh client backed by the same storage serves from the persisted
+        // cache, even after the underlying bucket is deleted (so no server call
+        // could succeed).
+        await awc1.deleteBucket(bucketId);
+        const awc2 = new AWClient(persistClientName, {
+            testing: true,
+            persistCache: true,
+            cacheStorage: storage,
+        });
+        const resp2: IEvent[][] = await awc2.query(timeperiods, query);
+        assert.deepEqual(resp1, resp2);
+
+        // clearCache() wipes the persisted layer.
+        awc2.clearCache();
+        assert.equal(0, Object.keys(storage.store).length);
+    });
+
+    it("never persists in-progress (future) periods", async () => {
+        const storage = makeStorage();
+        const awc = new AWClient(persistClientName, {
+            testing: true,
+            persistCache: true,
+            cacheStorage: storage,
+        });
+        await awc.ensureBucket(bucketId, eventType, hostname);
+
+        const now = new Date();
+        const timeperiods = [
+            { start: new Date(now.getTime() - 3600 * 1000), end: now },
+            { start: now, end: new Date(now.getTime() + 3600 * 1000) },
+        ];
+        await awc.query(timeperiods, query);
+
+        // Only the past period may have been persisted; the future one never is.
+        const entryKeys = Object.keys(storage.store).filter((k) =>
+            k.includes(":e:"),
+        );
+        assert.ok(entryKeys.length <= 1);
+    });
+});
+
 describe("API config behavior", () => {
     it("can abort requests", () => {
         const awc = new AWClient(clientName, {
