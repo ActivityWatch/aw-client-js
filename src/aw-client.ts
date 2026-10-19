@@ -29,7 +29,6 @@ const CACHE_SCHEMA_VERSION = "v1";
 // feature-detect with `typeof` without pulling in the whole DOM lib.
 declare const localStorage: CacheStorageAdapter | undefined;
 
-/** Returns true if the "start/end" timeperiod ends in the future. */
 /** FNV-1a 32-bit hash, used to keep storage keys short and bounded. */
 function hashString(str: string): string {
     let h = 0x811c9dc5;
@@ -174,6 +173,7 @@ class PersistentQueryCache {
             }
         }
 
+        const wasIndexed = this.index.indexOf(hash) !== -1;
         for (;;) {
             try {
                 this.storage.setItem(this.entryKey(hash), payload);
@@ -184,6 +184,17 @@ class PersistentQueryCache {
                 // On quota errors, evict the oldest entry and retry; otherwise
                 // give up and rely on the in-memory cache.
                 if (isQuotaError(e) && this.evictOldest(hash)) continue;
+                // Don't leave a new entry in storage that the persisted index
+                // doesn't list: it could never be served or evicted.
+                if (!wasIndexed) {
+                    const i = this.index.indexOf(hash);
+                    if (i !== -1) this.index.splice(i, 1);
+                    try {
+                        this.storage.removeItem(this.entryKey(hash));
+                    } catch {
+                        // ignore
+                    }
+                }
                 return;
             }
         }
@@ -858,7 +869,12 @@ export class AWClient {
             if (isComplete(timeperiod)) {
                 const cacheKey = JSON.stringify({ timeperiod, query });
                 this.queryCache[cacheKey] = result;
-                if (this.persistentCache) {
+                // Empty results are only served when cacheEmpty is set, so only
+                // persist them then; otherwise they'd just take up LRU slots.
+                if (
+                    this.persistentCache &&
+                    (params.cacheEmpty || !isEmpty(result))
+                ) {
                     this.persistentCache.set(cacheKey, result);
                 }
             }
