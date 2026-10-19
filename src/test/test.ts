@@ -337,6 +337,109 @@ describe("Persistent query cache", () => {
         assert.equal(0, Object.keys(storage.store).length);
     });
 
+    it("doesn't let a query in flight refill a cleared cache", async () => {
+        const storage = makeStorage();
+        const awc = new AWClient(persistClientName, {
+            testing: true,
+            persistCache: true,
+            cacheStorage: storage,
+        });
+        await awc.ensureBucket(bucketId, eventType, hostname);
+        await awc.heartbeat(bucketId, 5, {
+            ...testevent,
+            timestamp: new Date("2021-03-01T00:00:00Z"),
+        });
+        const pending = awc.query(
+            [{ start: new Date("2021-03-01"), end: new Date("2021-03-02") }],
+            query,
+        );
+        awc.clearCache();
+        const [events] = await pending;
+        assert.equal(1, events.length);
+        assert.equal(0, Object.keys(storage.store).length);
+    });
+
+    it("keeps entries written by another client sharing the storage", async () => {
+        const storage = makeStorage();
+        const opts = {
+            testing: true,
+            persistCache: true,
+            cacheStorage: storage,
+        };
+        const awc1 = new AWClient(persistClientName, opts);
+        const awc2 = new AWClient(persistClientName, opts);
+        await awc1.ensureBucket(bucketId, eventType, hostname);
+        for (const day of ["2021-04-01", "2021-04-02"]) {
+            await awc1.heartbeat(bucketId, 5, {
+                ...testevent,
+                timestamp: new Date(`${day}T00:00:00Z`),
+            });
+        }
+        const period = (day: string) => [
+            {
+                start: new Date(`${day}T00:00:00Z`),
+                end: new Date(`${day}T23:00:00Z`),
+            },
+        ];
+        await awc1.query(period("2021-04-01"), query);
+        await awc2.query(period("2021-04-02"), query);
+        const entryKeys = () =>
+            Object.keys(storage.store).filter((k) => k.includes(":e:"));
+        assert.equal(2, entryKeys().length);
+        const index = Object.keys(storage.store).find((k) =>
+            k.endsWith("index"),
+        );
+        assert.equal(2, JSON.parse(storage.store[index as string]).length);
+
+        // Clearing from either client removes the other's entries too.
+        awc1.clearCache();
+        assert.equal(0, entryKeys().length);
+    });
+
+    it("keeps using a full localStorage", async () => {
+        const storage = makeStorage();
+        let full = false;
+        const g = globalThis as { localStorage?: unknown };
+        const previous = g.localStorage;
+        g.localStorage = {
+            ...storage,
+            setItem: (k: string, v: string) => {
+                if (full) {
+                    const err = new Error("full");
+                    err.name = "QuotaExceededError";
+                    throw err;
+                }
+                storage.setItem(k, v);
+            },
+        };
+        try {
+            const timeperiods = [
+                { start: new Date("2021-05-01"), end: new Date("2021-05-02") },
+            ];
+            const awc1 = new AWClient(persistClientName, {
+                testing: true,
+                persistCache: true,
+            });
+            await awc1.ensureBucket(bucketId, eventType, hostname);
+            await awc1.heartbeat(bucketId, 5, {
+                ...testevent,
+                timestamp: new Date("2021-05-01T00:00:00Z"),
+            });
+            const resp1 = await awc1.query(timeperiods, query);
+            full = true;
+            // The next client still reads the persisted result, even with the
+            // bucket gone so that no server call could succeed.
+            await awc1.deleteBucket(bucketId);
+            const awc2 = new AWClient(persistClientName, {
+                testing: true,
+                persistCache: true,
+            });
+            assert.deepEqual(resp1, await awc2.query(timeperiods, query));
+        } finally {
+            g.localStorage = previous;
+        }
+    });
+
     it("never persists in-progress (future) periods", async () => {
         const storage = makeStorage();
         const awc = new AWClient(persistClientName, {
