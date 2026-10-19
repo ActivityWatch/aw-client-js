@@ -543,7 +543,7 @@ export class AWClient {
         }
 
         const timeperiodsNotCached = data.timeperiods.filter(
-            (_, i) => cacheResults[i] === null,
+            (_, i) => !params.cache || cacheResults[i] === null,
         );
 
         // Otherwise, query with remaining timeperiods
