@@ -62,7 +62,10 @@ function getDefaultCacheStorage(): CacheStorageAdapter | undefined {
         localStorage.setItem(probe, "1");
         localStorage.removeItem(probe);
         return localStorage;
-    } catch {
+    } catch (e) {
+        // A full storage is still readable, and the cache evicts entries when
+        // writes hit the quota, so keep using it.
+        if (isQuotaError(e)) return localStorage;
         // Storage present but unusable (e.g. Safari private mode throws).
         return undefined;
     }
@@ -103,6 +106,12 @@ class PersistentQueryCache {
         } catch {
             return [];
         }
+    }
+
+    // Other tabs share the same storage and index, so re-read it before
+    // changing it rather than overwriting their entries with a stale copy.
+    private syncIndex(): void {
+        this.index = this.loadIndex();
     }
 
     private saveIndex(): void {
@@ -146,6 +155,7 @@ class PersistentQueryCache {
         try {
             const entry = JSON.parse(raw) as { k: string; v: object[] };
             if (entry.k !== cacheKey) return undefined; // hash collision
+            this.syncIndex();
             this.touch(hash);
             try {
                 this.saveIndex();
@@ -161,6 +171,7 @@ class PersistentQueryCache {
     set(cacheKey: string, value: object[]): void {
         const hash = hashString(cacheKey);
         const payload = JSON.stringify({ k: cacheKey, v: value });
+        this.syncIndex();
 
         // Enforce the LRU cap before writing a new entry.
         if (this.maxEntries !== undefined) {
@@ -201,6 +212,7 @@ class PersistentQueryCache {
     }
 
     clear(): void {
+        this.syncIndex();
         for (const hash of this.index) {
             try {
                 this.storage.removeItem(this.entryKey(hash));
@@ -422,6 +434,7 @@ export class AWClient {
 
     private queryCache: { [cacheKey: string]: object[] };
     private persistentCache?: PersistentQueryCache;
+    private cacheGeneration = 0;
     private heartbeatQueues: {
         [bucketId: string]: {
             isProcessing: boolean;
@@ -466,6 +479,8 @@ export class AWClient {
 
     /** Clears both the in-memory and (if enabled) persisted query caches. */
     public clearCache(): void {
+        // Queries started before this must not refill the cleared caches.
+        this.cacheGeneration++;
         this.queryCache = {};
         this.persistentCache?.clear();
     }
@@ -830,6 +845,7 @@ export class AWClient {
             }
         }
 
+        const generation = this.cacheGeneration;
         const timeperiodsNotCached = data.timeperiods.filter(
             (_, i) => !params.cache || cacheResults[i] === null,
         );
@@ -865,6 +881,8 @@ export class AWClient {
         // return fresh results directly so partial responses never need to
         // enter the cache just to assemble the response.
         for (const [i, result] of queryResults.entries()) {
+            // clearCache() was called while this query was in flight.
+            if (this.cacheGeneration !== generation) break;
             const timeperiod = timeperiodsNotCached[i];
             if (isComplete(timeperiod)) {
                 const cacheKey = JSON.stringify({ timeperiod, query });
