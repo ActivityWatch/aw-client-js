@@ -289,6 +289,54 @@ describe("Persistent query cache", () => {
         assert.equal(0, Object.keys(storage.store).length);
     });
 
+    it("doesn't persist empty results unless cacheEmpty is set", async () => {
+        const storage = makeStorage();
+        const awc = new AWClient(persistClientName, {
+            testing: true,
+            persistCache: true,
+            cacheStorage: storage,
+        });
+        await awc.ensureBucket(bucketId, eventType, hostname);
+        // A past period without events returns an empty list.
+        const timeperiods = [
+            { start: new Date("2001-01-01"), end: new Date("2001-01-02") },
+        ];
+        const entryKeys = () =>
+            Object.keys(storage.store).filter((k) => k.includes(":e:"));
+
+        await awc.query(timeperiods, query);
+        assert.equal(0, entryKeys().length);
+
+        awc.clearCache();
+        await awc.query(timeperiods, query, { cacheEmpty: true });
+        assert.equal(1, entryKeys().length);
+    });
+
+    it("drops a written entry when its index can't be saved", async () => {
+        const storage = makeStorage();
+        const awc = new AWClient(persistClientName, {
+            testing: true,
+            persistCache: true,
+            cacheStorage: {
+                ...storage,
+                setItem: (k: string, v: string) => {
+                    if (k.endsWith("index")) throw new Error("SecurityError");
+                    storage.setItem(k, v);
+                },
+            },
+        });
+        await awc.ensureBucket(bucketId, eventType, hostname);
+        await awc.heartbeat(bucketId, 5, {
+            ...testevent,
+            timestamp: new Date("2021-02-01T00:00:00Z"),
+        });
+        await awc.query(
+            [{ start: new Date("2021-02-01"), end: new Date("2021-02-02") }],
+            query,
+        );
+        assert.equal(0, Object.keys(storage.store).length);
+    });
+
     it("never persists in-progress (future) periods", async () => {
         const storage = makeStorage();
         const awc = new AWClient(persistClientName, {

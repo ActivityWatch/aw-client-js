@@ -179,6 +179,7 @@ class PersistentQueryCache {
             }
         }
 
+        const wasIndexed = this.index.indexOf(hash) !== -1;
         for (;;) {
             try {
                 this.storage.setItem(this.entryKey(hash), payload);
@@ -189,6 +190,17 @@ class PersistentQueryCache {
                 // On quota errors, evict the oldest entry and retry; otherwise
                 // give up and rely on the in-memory cache.
                 if (isQuotaError(e) && this.evictOldest(hash)) continue;
+                // Don't leave a new entry in storage that the persisted index
+                // doesn't list: it could never be served or evicted.
+                if (!wasIndexed) {
+                    const i = this.index.indexOf(hash);
+                    if (i !== -1) this.index.splice(i, 1);
+                    try {
+                        this.storage.removeItem(this.entryKey(hash));
+                    } catch {
+                        // ignore
+                    }
+                }
                 return;
             }
         }
@@ -799,7 +811,13 @@ export class AWClient {
             const timeperiod = timeperiodsNotCached[i];
             const cacheKey = JSON.stringify({ timeperiod, query });
             this.queryCache[cacheKey] = result;
-            if (this.persistentCache && !timeperiodSpansFuture(timeperiod)) {
+            // Empty results are only served when cacheEmpty is set, so only
+            // persist them then; otherwise they'd just take up LRU slots.
+            if (
+                this.persistentCache &&
+                !timeperiodSpansFuture(timeperiod) &&
+                (params.cacheEmpty || !isEmpty(result))
+            ) {
                 this.persistentCache.set(cacheKey, result);
             }
         }
