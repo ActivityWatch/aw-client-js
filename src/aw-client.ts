@@ -508,14 +508,17 @@ export class AWClient {
             ),
         };
 
+        // Eligibility is fixed before the request: a response begun before a
+        // period ends may still be partial even if it arrives after the end.
+        const now = new Date();
+        const isComplete = (timeperiod: string) =>
+            new Date(timeperiod.split("/")[1]) <= now;
         const cacheResults: any[] = [];
         if (params.cache) {
             // Check cache for each {timeperiod, query} pair
             for (const timeperiod of data.timeperiods) {
                 // check if timeperiod spans the future
-                const stop = new Date(timeperiod.split("/")[1]);
-                const now = new Date();
-                if (now < stop) {
+                if (!isComplete(timeperiod)) {
                     cacheResults.push(null);
                     continue;
                 }
@@ -574,26 +577,20 @@ export class AWClient {
             }
         }
 
-        // Cache results
-        // NOTE: this also caches timeperiods that span the future,
-        //       but this is ok since we check that when first checking the cache,
-        //       and makes it easier to return all results from cache.
+        // Cache only completed periods; return fresh results directly so partial
+        // responses never need to enter the cache just to assemble the response.
         for (const [i, result] of queryResults.entries()) {
-            const cacheKey = JSON.stringify({
-                timeperiod: timeperiodsNotCached[i],
-                query,
-            });
-            this.queryCache[cacheKey] = result;
+            const timeperiod = timeperiodsNotCached[i];
+            if (isComplete(timeperiod)) {
+                const cacheKey = JSON.stringify({ timeperiod, query });
+                this.queryCache[cacheKey] = result;
+            }
         }
 
-        // Return all results from cache
-        return data.timeperiods.map((tp) => {
-            const cacheKey = JSON.stringify({
-                timeperiod: tp,
-                query,
-            });
-            return this.queryCache[cacheKey];
-        });
+        let freshIndex = 0;
+        return cacheResults.map((result) =>
+            result === null ? queryResults[freshIndex++] : result,
+        );
     }
 
     private async send_heartbeat(
