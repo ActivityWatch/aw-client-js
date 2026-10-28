@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { randomUUID } from "crypto";
 import { AWClient, IEvent } from "../aw-client";
 
 // The encoded-looking percent case is literal data, not pre-encoded input.
@@ -91,8 +92,12 @@ describe("Bucket path segments", () => {
 
 describe("Supported-server bucket paths", () => {
     const client = new AWClient("bucket-path-test", { testing: true });
+    // Interrupted or concurrent runs must not share server-side fixtures.
+    const runId = randomUUID();
 
-    for (const [bucketId, encoded] of bucketIds) {
+    for (const [baseId, baseEncoded] of bucketIds) {
+        const bucketId = `${baseId}-${runId}`;
+        const encoded = `${baseEncoded}-${runId}`;
         it(`preserves the literal ID through CRUD and heartbeat: ${bucketId}`, async () => {
             // Establish server support independently before using AWClient.
             const path = `${client.apiURL}/0/buckets/${encoded}`;
