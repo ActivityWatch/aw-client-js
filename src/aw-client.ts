@@ -379,7 +379,8 @@ export class AWClient {
         const searchParams = new URLSearchParams();
         if (params.start) searchParams.set("start", params.start.toISOString());
         if (params.end) searchParams.set("end", params.end.toISOString());
-        if (params.limit) searchParams.set("limit", params.limit.toString());
+        if (params.limit !== undefined && params.limit !== null)
+            searchParams.set("limit", params.limit.toString());
         const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
         return this._getStructured<IEventRaw[]>(url).then((events) =>
             events.map(this.processRawEvent),
