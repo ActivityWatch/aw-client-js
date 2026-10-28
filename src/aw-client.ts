@@ -495,8 +495,12 @@ export class AWClient {
         params.name = params.name ?? "query";
 
         function isEmpty(obj: any) {
-            // obj can be an array or an object, this works for both
-            return Object.keys(obj).length === 0;
+            // Only collections can be empty; scalar zero/false are valid results.
+            return (
+                obj !== null &&
+                typeof obj === "object" &&
+                Object.keys(obj).length === 0
+            );
         }
 
         const data = {
@@ -523,7 +527,7 @@ export class AWClient {
                 // check cache
                 const cacheKey = JSON.stringify({ timeperiod, query });
                 if (
-                    this.queryCache[cacheKey] &&
+                    this.queryCache[cacheKey] !== undefined &&
                     (params.cacheEmpty || !isEmpty(this.queryCache[cacheKey]))
                 ) {
                     cacheResults.push(this.queryCache[cacheKey]);
