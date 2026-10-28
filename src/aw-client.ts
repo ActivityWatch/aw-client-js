@@ -144,11 +144,12 @@ function makeTimeoutSignal(
     return { signal: controller.signal, cleanup };
 }
 
-async function fetchWithFailure(
+async function fetchWithFailure<T>(
     input: string,
     init: RequestInit,
-    timeout?: number,
-): Promise<Response> {
+    timeout: number | undefined,
+    consumeResponse: (response: Response) => T | Promise<T>,
+): Promise<T> {
     const { signal, cleanup } = makeTimeoutSignal(
         timeout,
         init.signal || undefined,
@@ -156,7 +157,7 @@ async function fetchWithFailure(
     return fetch(input, { ...init, signal })
         .then((res) => {
             if (res.status >= 300) throw new FetchError(res);
-            return res;
+            return consumeResponse(res);
         })
         .finally(cleanup);
 }
@@ -231,7 +232,8 @@ export class AWClient {
                 signal: this.controller.signal,
             },
             this.timeout,
-        ).then((res) => res.json() as Promise<T>);
+            (res) => res.json() as Promise<T>,
+        );
     }
 
     /**
@@ -249,7 +251,11 @@ export class AWClient {
         );
     }
 
-    private async _post(endpoint: string, data: Record<string, any>) {
+    private async _post<T>(
+        endpoint: string,
+        data: Record<string, any>,
+        consumeResponse: (response: Response) => T | Promise<T>,
+    ) {
         return fetchWithFailure(
             `${this.apiURL}${endpoint}`,
             {
@@ -262,6 +268,7 @@ export class AWClient {
                 body: JSON.stringify(data),
             },
             this.timeout,
+            consumeResponse,
         );
     }
 
@@ -274,6 +281,7 @@ export class AWClient {
                 headers: { ...this._authHeaders() },
             },
             this.timeout,
+            () => undefined,
         );
     }
 
@@ -304,11 +312,11 @@ export class AWClient {
         type: string,
         hostname: string,
     ): Promise<{ alreadyExist: boolean }> {
-        return this._post(`/0/buckets/${bucketId}`, {
-            client: this.clientname,
-            type,
-            hostname,
-        })
+        return this._post(
+            `/0/buckets/${bucketId}`,
+            { client: this.clientname, type, hostname },
+            () => undefined,
+        )
             .then(() => ({ alreadyExist: false }))
             .catch((err) => {
                 // Will return 304 if bucket already exists
@@ -324,11 +332,11 @@ export class AWClient {
         type: string,
         hostname: string,
     ): Promise<void> {
-        await this._post(`/0/buckets/${bucketId}`, {
-            client: this.clientname,
-            type,
-            hostname,
-        });
+        await this._post(
+            `/0/buckets/${bucketId}`,
+            { client: this.clientname, type, hostname },
+            () => undefined,
+        );
     }
 
     public async deleteBucket(bucketId: string): Promise<void> {
@@ -416,7 +424,11 @@ export class AWClient {
                 throw Error(`Can't insert event with ID assigned: ${event}`);
             }
         }
-        await this._post("/0/buckets/" + bucketId + "/events", events);
+        await this._post(
+            "/0/buckets/" + bucketId + "/events",
+            events,
+            () => undefined,
+        );
     }
 
     /** Replace an event, requires the event to have an ID assigned */
@@ -434,7 +446,11 @@ export class AWClient {
                 throw Error("Can't replace event without ID assigned");
             }
         }
-        await this._post("/0/buckets/" + bucketId + "/events", events);
+        await this._post(
+            "/0/buckets/" + bucketId + "/events",
+            events,
+            () => undefined,
+        );
     }
 
     /** Delete an event by ID */
@@ -549,12 +565,11 @@ export class AWClient {
         // Otherwise, query with remaining timeperiods
         const queryResults =
             timeperiodsNotCached.length > 0
-                ? await this._post("/0/query/", {
-                      ...data,
-                      timeperiods: timeperiodsNotCached,
-                  })
-                      .then((res) => res.json())
-                      .then((d) => normalizeJsonResponse<any[]>(d, "/0/query/"))
+                ? await this._post(
+                      "/0/query/",
+                      { ...data, timeperiods: timeperiodsNotCached },
+                      (res) => res.json(),
+                  ).then((d) => normalizeJsonResponse<any[]>(d, "/0/query/"))
                 : [];
 
         if (!params.cache) return queryResults;
@@ -603,7 +618,9 @@ export class AWClient {
     ): Promise<IEvent> {
         const url =
             "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
-        const heartbeat = await this._post(url, data).then(
+        const heartbeat = await this._post(
+            url,
+            data,
             (res) => res.json() as Promise<any>,
         );
         heartbeat.timestamp = new Date(heartbeat.timestamp);
@@ -644,6 +661,6 @@ export class AWClient {
 
     // Set a setting
     public async set_setting(key: string, value: JSONObject): Promise<void> {
-        await this._post("/0/settings/" + key, value);
+        await this._post("/0/settings/" + key, value, () => undefined);
     }
 }
