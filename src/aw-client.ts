@@ -193,7 +193,7 @@ export class AWClient {
             isProcessing: boolean;
             data: IHeartbeatQueueItem[];
         };
-    } = {};
+    } = Object.create(null);
 
     constructor(clientname: string, options: AWReqOptions = {}) {
         this.clientname = clientname;
@@ -339,11 +339,12 @@ export class AWClient {
         const rawBuckets = await this._getStructured<{
             [bucketId: string]: IBucketRaw;
         }>("/0/buckets/");
-        const buckets: { [bucketId: string]: IBucket } = {};
-        for (const bucketId of Object.keys(rawBuckets)) {
-            buckets[bucketId] = this.processRawBucket(rawBuckets[bucketId]);
-        }
-        return buckets;
+        return Object.fromEntries(
+            Object.keys(rawBuckets).map((bucketId) => [
+                bucketId,
+                this.processRawBucket(rawBuckets[bucketId]),
+            ]),
+        );
     }
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
