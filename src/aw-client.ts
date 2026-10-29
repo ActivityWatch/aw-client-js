@@ -478,6 +478,7 @@ export class AWClient {
      *
      * If cache is enabled, for each {query, timeperiod} it will return cached data if available,
      * if a timeperiod spans the future it will not cache it.
+     * Returned results are caller-owned; mutations do not change cached data.
      */
     public async query(
         timeperiods: (string | { start: Date; end: Date })[],
@@ -538,7 +539,7 @@ export class AWClient {
                     console.debug(
                         `Returning fully cached query results for ${params.name}`,
                     );
-                return cacheResults;
+                return structuredClone(cacheResults);
             }
         }
 
@@ -592,7 +593,7 @@ export class AWClient {
                 timeperiod: tp,
                 query,
             });
-            return this.queryCache[cacheKey];
+            return structuredClone(this.queryCache[cacheKey]);
         });
     }
 
