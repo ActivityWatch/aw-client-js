@@ -86,6 +86,32 @@ describe("Basic API usage", () => {
         assert.equal(events_after.length, 1);
     });
 
+    it("preserves zero, positive and unbounded event limits on a populated bucket", async () => {
+        const limitBucket = `${bucketId}-limits`;
+        await awc.ensureBucket(limitBucket, eventType, hostname);
+        try {
+            await awc.insertEvents(limitBucket, [
+                { ...testevent, timestamp: new Date("2026-10-01T01:00:00Z") },
+                { ...testevent, timestamp: new Date("2026-10-01T02:00:00Z") },
+            ]);
+            assert.equal((await awc.getEvents(limitBucket)).length, 2);
+            assert.equal(
+                (await awc.getEvents(limitBucket, { limit: 1 })).length,
+                1,
+            );
+            assert.equal(
+                (await awc.getEvents(limitBucket, { limit: -1 })).length,
+                2,
+            );
+            assert.deepEqual(
+                await awc.getEvents(limitBucket, { limit: 0 }),
+                [],
+            );
+        } finally {
+            await awc.deleteBucket(limitBucket);
+        }
+    });
+
     it("Checks for presence/absence of event IDs for insert/replace", async () => {
         // Try replacing event without ID, should fail
         try {
