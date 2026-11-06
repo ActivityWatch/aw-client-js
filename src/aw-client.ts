@@ -313,7 +313,7 @@ export class AWClient {
         hostname: string,
     ): Promise<{ alreadyExist: boolean }> {
         return this._post(
-            `/0/buckets/${bucketId}`,
+            `/0/buckets/${encodeURIComponent(bucketId)}`,
             { client: this.clientname, type, hostname },
             () => undefined,
         )
@@ -333,14 +333,16 @@ export class AWClient {
         hostname: string,
     ): Promise<void> {
         await this._post(
-            `/0/buckets/${bucketId}`,
+            `/0/buckets/${encodeURIComponent(bucketId)}`,
             { client: this.clientname, type, hostname },
             () => undefined,
         );
     }
 
     public async deleteBucket(bucketId: string): Promise<void> {
-        await this._delete(`/0/buckets/${bucketId}?force=1`);
+        await this._delete(
+            `/0/buckets/${encodeURIComponent(bucketId)}?force=1`,
+        );
     }
 
     public async getBuckets(): Promise<{ [bucketId: string]: IBucket }> {
@@ -357,7 +359,7 @@ export class AWClient {
 
     public async getBucketInfo(bucketId: string): Promise<IBucket> {
         const bucket = await this._getStructured<IBucketRaw>(
-            `/0/buckets/${bucketId}`,
+            `/0/buckets/${encodeURIComponent(bucketId)}`,
         );
         if (bucket.data === undefined) {
             console.warn(
@@ -376,7 +378,7 @@ export class AWClient {
     /** Get a single event by ID */
     public async getEvent(bucketId: string, eventId: number): Promise<IEvent> {
         return this._getStructured<IEventRaw>(
-            `/0/buckets/${bucketId}/events/${eventId}`,
+            `/0/buckets/${encodeURIComponent(bucketId)}/events/${eventId}`,
         ).then(this.processRawEvent);
     }
 
@@ -390,7 +392,7 @@ export class AWClient {
         if (params.end) searchParams.set("end", params.end.toISOString());
         if (params.limit !== undefined && params.limit !== null)
             searchParams.set("limit", params.limit.toString());
-        const url = `/0/buckets/${bucketId}/events?${searchParams.toString()}`;
+        const url = `/0/buckets/${encodeURIComponent(bucketId)}/events?${searchParams.toString()}`;
         return this._getStructured<IEventRaw[]>(url).then((events) =>
             events.map(this.processRawEvent),
         );
@@ -405,7 +407,7 @@ export class AWClient {
         const params = new URLSearchParams();
         if (startTime) params.set("start", startTime.toISOString());
         if (endTime) params.set("end", endTime.toISOString());
-        const url = `/0/buckets/${bucketId}/events/count?${params.toString()}`;
+        const url = `/0/buckets/${encodeURIComponent(bucketId)}/events/count?${params.toString()}`;
         return this._getStructured<number>(url);
     }
 
@@ -427,7 +429,7 @@ export class AWClient {
             }
         }
         await this._post(
-            "/0/buckets/" + bucketId + "/events",
+            `/0/buckets/${encodeURIComponent(bucketId)}/events`,
             events,
             () => undefined,
         );
@@ -449,7 +451,7 @@ export class AWClient {
             }
         }
         await this._post(
-            "/0/buckets/" + bucketId + "/events",
+            `/0/buckets/${encodeURIComponent(bucketId)}/events`,
             events,
             () => undefined,
         );
@@ -457,7 +459,9 @@ export class AWClient {
 
     /** Delete an event by ID */
     public async deleteEvent(bucketId: string, eventId: number): Promise<void> {
-        await this._delete("/0/buckets/" + bucketId + "/events/" + eventId);
+        await this._delete(
+            `/0/buckets/${encodeURIComponent(bucketId)}/events/${eventId}`,
+        );
     }
 
     /**
@@ -615,8 +619,7 @@ export class AWClient {
         pulsetime: number,
         data: IEvent,
     ): Promise<IEvent> {
-        const url =
-            "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
+        const url = `/0/buckets/${encodeURIComponent(bucketId)}/heartbeat?pulsetime=${pulsetime}`;
         const heartbeat = await this._post(
             url,
             data,
