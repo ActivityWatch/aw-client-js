@@ -478,12 +478,13 @@ export class AWClient {
         };
 
         return new Promise((resolve, reject) => {
-            // Add heartbeat request to queue
+            // Add heartbeat request to queue. Copy the event: it is serialized
+            // only when dequeued, and the caller may reuse the object meanwhile.
             this.heartbeatQueues[bucketId].data.push({
                 onSuccess: resolve,
                 onError: reject,
                 pulsetime,
-                heartbeat,
+                heartbeat: structuredClone(heartbeat),
             });
 
             this.updateHeartbeatQueue(bucketId);
@@ -624,10 +625,8 @@ export class AWClient {
     ): Promise<IEvent> {
         const url =
             "/0/buckets/" + bucketId + "/heartbeat?pulsetime=" + pulsetime;
-        const heartbeat = await this._post(
-            url,
-            data,
-            (res) => res.json() as Promise<any>,
+        const heartbeat = await this._post(url, data, (res) => res.json()).then(
+            (d) => normalizeJsonResponse<any>(d, url),
         );
         heartbeat.timestamp = new Date(heartbeat.timestamp);
         return heartbeat;
