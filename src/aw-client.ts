@@ -52,6 +52,8 @@ interface IBucketRaw {
     hostname: string;
     created: string;
     last_update?: string;
+    // The field name both aw-server and aw-server-rust send (rust: null).
+    last_updated?: string | null;
     data: Record<string, unknown>;
 }
 export interface IBucket {
@@ -61,6 +63,8 @@ export interface IBucket {
     client: string;
     hostname: string;
     created: Date;
+    last_updated?: Date;
+    /** @deprecated Same value as `last_updated`, kept for compatibility. */
     last_update?: Date;
     data: Record<string, unknown>;
 }
@@ -297,13 +301,13 @@ export class AWClient {
 
     /// Buckets
     private processRawBucket(bucket: IBucketRaw): IBucket {
+        const raw = bucket.last_updated ?? bucket.last_update;
+        const last_updated = raw ? new Date(raw) : undefined;
         return {
             ...bucket,
             created: new Date(bucket.created),
-            last_update:
-                bucket.last_update !== undefined
-                    ? new Date(bucket.last_update)
-                    : undefined,
+            last_updated,
+            last_update: last_updated,
         };
     }
 
