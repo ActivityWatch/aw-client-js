@@ -53,4 +53,13 @@ describe("Query period finalization without a UTC offset", () => {
         await client.query([period], query);
         assert.strictEqual(calls, 1);
     });
+
+    it("still honours an explicit signed offset", async () => {
+        // Ends at 18:00Z, before the test clock's 20:00Z: complete, cached.
+        const period = "2026-10-01T00:00:00+06:00/2026-10-02T00:00:00+06:00";
+        const client = new AWClient("period-timezone-test");
+        await client.query([period], query);
+        await client.query([period], query);
+        assert.strictEqual(calls, 1);
+    });
 });
