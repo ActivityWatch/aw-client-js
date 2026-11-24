@@ -534,8 +534,17 @@ export class AWClient {
         // Eligibility is fixed before the request: a response begun before a
         // period ends may still be partial even if it arrives after the end.
         const now = new Date();
-        const isComplete = (timeperiod: string) =>
-            new Date(timeperiod.split("/")[1]) <= now;
+        const isComplete = (timeperiod: string) => {
+            const end = timeperiod.split("/")[1] ?? "";
+            // JS parses a date-time without an offset as local time, but
+            // aw-server parses it as UTC. Read it as UTC too, so a period that
+            // is still running on the server is never cached as complete.
+            const hasOffset = /(Z|[+-]\d{2}(:?\d{2})?)$/i.test(end);
+            return (
+                new Date(end.includes("T") && !hasOffset ? end + "Z" : end) <=
+                now
+            );
+        };
         const cacheResults: any[] = [];
         if (params.cache) {
             // Check cache for each {timeperiod, query} pair
