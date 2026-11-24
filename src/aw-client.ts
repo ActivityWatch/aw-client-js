@@ -480,11 +480,17 @@ export class AWClient {
         return new Promise((resolve, reject) => {
             // Add heartbeat request to queue. Copy the event: it is serialized
             // only when dequeued, and the caller may reuse the object meanwhile.
+            // Data values are primitives, so a shallow copy is enough, and
+            // unlike structuredClone it works on Proxies (e.g. Vue reactive).
             this.heartbeatQueues[bucketId].data.push({
                 onSuccess: resolve,
                 onError: reject,
                 pulsetime,
-                heartbeat: structuredClone(heartbeat),
+                heartbeat: {
+                    ...heartbeat,
+                    timestamp: new Date(heartbeat.timestamp),
+                    data: { ...heartbeat.data },
+                },
             });
 
             this.updateHeartbeatQueue(bucketId);

@@ -65,6 +65,19 @@ describe("Heartbeat queue", function () {
         );
     });
 
+    it("accepts event data wrapped in a Proxy (e.g. Vue reactive)", async () => {
+        const client = new AWClient("heartbeat-queue", { baseURL });
+        await client.heartbeat("bucket", 10, {
+            timestamp: new Date("2026-01-01T00:00:00Z"),
+            duration: 0,
+            data: new Proxy({ title: "reactive" }, {}),
+        });
+        assert.deepEqual(
+            received.map((e) => e.data.title),
+            ["reactive"],
+        );
+    });
+
     it("resolves when the server double-encodes the merged event", async () => {
         // Same server behaviour as ActivityWatch/aw-client-js#45: the body is a
         // JSON string containing the event. The heartbeat was stored, so it
