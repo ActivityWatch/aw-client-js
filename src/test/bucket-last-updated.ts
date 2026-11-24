@@ -36,4 +36,17 @@ describe("Bucket last_updated", () => {
         assert.strictEqual(buckets.b1.last_updated, undefined);
         assert.strictEqual(buckets.b1.last_update, undefined);
     });
+
+    it("falls back to a legacy last_update field", async () => {
+        const ts = "2026-01-02T03:04:05.000Z";
+        const legacy = {
+            ...raw(null),
+            last_updated: undefined,
+            last_update: ts,
+        };
+        globalThis.fetch = async () => new Response(JSON.stringify(legacy));
+        const bucket = await new AWClient("test").getBucketInfo("b1");
+        assert.strictEqual(bucket.last_updated?.toISOString(), ts);
+        assert.strictEqual(bucket.last_update?.toISOString(), ts);
+    });
 });
